@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.5.0",
+    "mineflayer": "^4.27.0",
+    "proxy-agent": "^6.5.0",
+    "socks": "^2.8.4"
+  }
+}
