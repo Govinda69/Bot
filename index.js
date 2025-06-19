@@ -22,19 +22,19 @@ const CONFIG = {
     },
     kit: {
         cooldownTime: 30 * 1000,
-        vipCooldownTime: 10 * 1000, // VIP users get shorter cooldown
+        vipCooldownTime: 10 * 1000,
         teleportTimeout: 25000,
         deliveryDelay: 3000,
         proximityDistance: 5,
         tpaAcceptDelay: 2000,
         maxQueueSize: 50,
-        autoCleanupInterval: 600000 // 10 minutes
+        autoCleanupInterval: 600000
     },
     spammer: {
         interval: 40000,
         filePath: 'spammer.txt',
         maxMessageLength: 100,
-        randomDelay: 5000 // Random delay variation
+        randomDelay: 5000
     },
     discord: {
         embedColor: {
@@ -51,7 +51,7 @@ class BotState extends EventEmitter {
     constructor() {
         super();
         this.cooldowns = new Map();
-        this.vipUsers = new Set(['0xpwnd', 'bigbear','dragonkit']); // VIP users list
+        this.vipUsers = new Set(['0xpwnd', 'bigbear', 'dragonkit']);
         this.kitInProgress = false;
         this.kitQueue = [];
         this.devModeEnabled = false;
@@ -112,6 +112,7 @@ class BotState extends EventEmitter {
         }
         this.spammerStarted = false;
     }
+
     toggleDevMode() {
         this.devModeEnabled = !this.devModeEnabled;
         return this.devModeEnabled;
@@ -187,10 +188,8 @@ class GiveawayManager extends EventEmitter {
             active: true
         };
 
-        // Stop normal spammer and start giveaway spammer
         this.startGiveawaySpammer();
 
-        // Set auto-end timer
         this.activeGiveaway.autoEndTimer = setTimeout(() => {
             this.endGiveaway(true);
         }, durationMinutes * 60 * 1000);
@@ -246,7 +245,6 @@ class GiveawayManager extends EventEmitter {
             return { success: false, message: 'No active giveaway!' };
         }
 
-        // Clear auto-end timer
         if (this.activeGiveaway.autoEndTimer) {
             clearTimeout(this.activeGiveaway.autoEndTimer);
         }
@@ -267,10 +265,8 @@ class GiveawayManager extends EventEmitter {
             autoEnd: autoEnd
         };
 
-        // Stop giveaway spammer and restart normal spammer
         this.stopGiveawaySpammer();
 
-        // Mark as inactive
         this.activeGiveaway.active = false;
         this.activeGiveaway = null;
 
@@ -283,14 +279,12 @@ class GiveawayManager extends EventEmitter {
             return { success: false, message: 'No active giveaway!' };
         }
 
-        // Clear auto-end timer
         if (this.activeGiveaway.autoEndTimer) {
             clearTimeout(this.activeGiveaway.autoEndTimer);
         }
 
         const giveaway = this.activeGiveaway;
 
-        // Stop giveaway spammer and restart normal spammer
         this.stopGiveawaySpammer();
 
         this.activeGiveaway = null;
@@ -300,7 +294,6 @@ class GiveawayManager extends EventEmitter {
     }
 
     startGiveawaySpammer() {
-        // Stop normal spammer first
         if (state.spammerInterval) {
             state.stopSpammer();
         }
@@ -321,13 +314,11 @@ class GiveawayManager extends EventEmitter {
                 messageIndex = (messageIndex + 1) % this.giveawayMessages.length;
             }
 
-            // Random delay for giveaway spam (more frequent than normal)
             const randomDelay = Math.floor(Math.random() * 3000);
-            setTimeout(sendGiveawayMessage, 15000 + randomDelay); // 15s base interval
+            setTimeout(sendGiveawayMessage, 15000 + randomDelay);
         };
 
-        // Start giveaway spammer
-        setTimeout(sendGiveawayMessage, 5000); // Initial delay
+        setTimeout(sendGiveawayMessage, 5000);
         logger.info('Giveaway spammer started');
     }
 
@@ -338,7 +329,6 @@ class GiveawayManager extends EventEmitter {
         }
         this.giveawaySpammerActive = false;
 
-        // Restart normal spammer after delay
         setTimeout(async () => {
             if (state.isConnected && state.isLoggedIn && !this.activeGiveaway) {
                 await startSpammer();
@@ -365,10 +355,8 @@ class GiveawayManager extends EventEmitter {
     }
 }
 
-// Create giveaway manager instance
 const giveawayManager = new GiveawayManager();
 
-// Giveaway event handlers
 giveawayManager.on('giveawayCreated', async (giveaway) => {
     const startMessage = `🎉 GIVEAWAY STARTED! 🎉\n` +
                         `🏆 Prize: ${giveaway.prize}\n` +
@@ -376,14 +364,12 @@ giveawayManager.on('giveawayCreated', async (giveaway) => {
                         `📝 Join with: $giveaway\n` +
                         `ℹ️ Info: $giveaway info`;
 
-    // Announce in Minecraft
-    await safeChat(startMessage.split('\n')[0]); // First line
+    await safeChat(startMessage.split('\n')[0]);
     await delay(1000);
     await safeChat(`🏆 Prize: ${giveaway.prize}`);
     await delay(1000);
     await safeChat(`⏰ ${giveaway.duration} minutes | Join: $giveaway`);
 
-    // Announce in Discord
     const discordEmbed = createEmbed(
         '🎉 Giveaway Started!',
         `**Prize:** ${giveaway.prize}\n` +
@@ -409,17 +395,14 @@ giveawayManager.on('giveawayEnded', async (result) => {
     const { giveaway, winner, participantCount, autoEnd } = result;
 
     if (winner) {
-        // Announce winner in Minecraft
         await safeChat(`🎉 GIVEAWAY ENDED! Winner: ${winner}!`);
         await delay(1000);
         await safeChat(`🏆 ${winner} won: ${giveaway.prize}`);
         await delay(1000);
         await safeChat(`🎊 Congratulations ${winner}!`);
 
-        // Send private message to winner
         await safeChat(`/msg ${winner} &5🎉 CONGRATULATIONS! You won the giveaway! Prize: ${giveaway.prize}. Contact staff to claim your prize!`);
 
-        // Discord announcement
         const winnerEmbed = createEmbed(
             '🎉 Giveaway Ended - Winner!',
             `**Winner:** ${winner}\n` +
@@ -435,7 +418,6 @@ giveawayManager.on('giveawayEnded', async (result) => {
 
         await sendToDiscord(process.env.DISCORD_CHANNEL_ID, winnerEmbed, true);
     } else {
-        // No participants
         await safeChat(`🎉 Giveaway ended - No participants!`);
 
         const noWinnerEmbed = createEmbed(
@@ -453,12 +435,10 @@ giveawayManager.on('giveawayEnded', async (result) => {
 });
 
 giveawayManager.on('giveawayCancelled', async (giveaway) => {
-    // Announce cancellation in Minecraft
     await safeChat(`❌ Giveaway cancelled by admin!`);
     await delay(1000);
     await safeChat(`🚫 Prize: ${giveaway.prize} - No winner`);
 
-    // Discord announcement
     const cancelEmbed = createEmbed(
         '❌ Giveaway Cancelled',
         `**Prize:** ${giveaway.prize}\n` +
@@ -471,7 +451,6 @@ giveawayManager.on('giveawayCancelled', async (giveaway) => {
     logger.info(`Giveaway cancelled: ${giveaway.title}`);
 });
 
-// Helper function to format time
 function formatGiveawayTime(ms) {
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
@@ -481,7 +460,6 @@ function formatGiveawayTime(ms) {
 const state = new BotState();
 const blacklistedUsers = new Set(['ump', '_pigy_', 'thetroll2001']);
 
-// Enhanced Discord client
 const discordClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -493,7 +471,6 @@ const discordClient = new Client({
 
 let mcBot;
 
-// Enhanced Logger with different levels
 class Logger {
     constructor() {
         this.logLevel = process.env.LOG_LEVEL || 'info';
@@ -523,7 +500,6 @@ class Logger {
 
 const logger = new Logger();
 
-// Utility functions
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const sanitizeMessage = (message) => {
@@ -542,13 +518,12 @@ const formatUptime = (ms) => {
     return `${seconds}s`;
 };
 
-// Enhanced safe chat function with rate limiting
 class ChatManager {
     constructor() {
         this.messageQueue = [];
         this.processing = false;
         this.lastMessageTime = 0;
-        this.minDelay = 1000; // Minimum delay between messages
+        this.minDelay = 1000;
     }
 
     async safeChat(message, priority = false, bypassLoginCheck = false) {
@@ -609,7 +584,6 @@ class ChatManager {
                 resolve(false);
             }
             
-            // Small delay between messages
             await delay(500);
         }
         
@@ -621,7 +595,6 @@ const chatManager = new ChatManager();
 const safeChat = (message, priority = false, bypassLoginCheck = false) => 
     chatManager.safeChat(message, priority, bypassLoginCheck);
 
-// Enhanced Discord utilities
 function createEmbed(title, description, color = CONFIG.discord.embedColor.info, fields = []) {
     const embed = new EmbedBuilder()
         .setTitle(title)
@@ -661,7 +634,6 @@ async function sendToDiscord(channelId, content, isEmbed = false, components = n
     }
 }
 
-// Enhanced login sequence
 async function performLoginSequence() {
     if (state.loginInProgress) {
         logger.warn('Login already in progress');
@@ -699,7 +671,6 @@ async function performLoginSequence() {
         await delay(1000);
         await safeChat("🤖 Bot online - Enhanced kit system ready!");
         
-        // Start additional services
         await delay(2000);
         await startSpammer();
         
@@ -718,14 +689,12 @@ async function performLoginSequence() {
 }
 
 async function logKitDelivery(username, position, dimension) {
-    // Convert to whole numbers (integers)
     const coords = {
         x: Math.floor(position.x),
         y: Math.floor(position.y),
         z: Math.floor(position.z)
     };
     
-    // Simple Discord message format
     const message = `{${coords.x}, ${coords.y}, ${coords.z}} in ${dimension} by ${username}`;
 
     await sendToDiscord(process.env.COORDS_CHANNEL_ID, message, false);
@@ -741,50 +710,63 @@ async function startKitDelivery(username) {
 
     logger.info(`Starting kit delivery for ${username}`);
     
-    if (!(await safeChat('/home kit', true))) {
-        finishKit(username, false);
-        return;
-    }
-    
-    setTimeout(async () => {
-        try {
-            // Store initial position before TPA
-            if (mcBot && mcBot.entity) {
-                state.initialPosition = {
-                    x: mcBot.entity.position.x,
-                    y: mcBot.entity.position.y,
-                    z: mcBot.entity.position.z
-                };
-                
-                // Start watching for position changes
-                startPositionWatcher(username);
+    try {
+        // Check if bot is within 15000 blocks of spawn (0,0)
+        if (mcBot && mcBot.entity) {
+            const pos = mcBot.entity.position;
+            const distanceFromSpawn = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
+            if (distanceFromSpawn < 15000) {
+                logger.info(`Bot is within 15000 blocks of spawn (${distanceFromSpawn.toFixed(2)} blocks), executing /kill`);
+                await safeChat('/kill', true);
+                await delay(2000); // Wait for respawn
             }
-            
-            await safeChat(`/tpa ${username}`, true);
-            await safeChat(`/msg ${username} &6&l📦 Your kit is ready! Please accept the TPA (&9&l/tpayes ${CONFIG.minecraft.username}) &6within 25 seconds.`, true);
-            
-            // Set timeout for TPA acceptance
-            state.tpaTimeout = setTimeout(() => {
-                if (state.kitInProgress && state.currentKitAsker === username) {
-                    logger.info(`TPA timeout for ${username}`);
-                    safeChat(`/msg ${username} &4&l⏰ Timeout: You did not accept the TPA within 25 seconds.`);
-                    finishKit(username, false);
-                }
-            }, CONFIG.kit.teleportTimeout);
-            
-        } catch (error) {
-            logger.error(`Error during kit delivery: ${error.message}`);
-            finishKit(username, false);
         }
-    }, CONFIG.kit.deliveryDelay);
+
+        if (!(await safeChat('/home kit', true))) {
+            finishKit(username, false);
+            return;
+        }
+        
+        setTimeout(async () => {
+            try {
+                if (mcBot && mcBot.entity) {
+                    state.initialPosition = {
+                        x: mcBot.entity.position.x,
+                        y: mcBot.entity.position.y,
+                        z: mcBot.entity.position.z
+                    };
+                    
+                    startPositionWatcher(username);
+                }
+                
+                await safeChat(`/tpa ${username}`, true);
+                await safeChat(`/msg ${username} &6&l📦 Your kit is ready! Please accept the TPA (&9&l/tpayes ${CONFIG.minecraft.username}) &6within 25 seconds.`, true);
+                
+                state.tpaTimeout = setTimeout(() => {
+                    if (state.kitInProgress && state.currentKitAsker === username) {
+                        logger.info(`TPA timeout for ${username}`);
+                        safeChat(`/msg ${username} &4&l⏰ Timeout: You did not accept the TPA within 25 seconds.`);
+                        finishKit(username, false);
+                    }
+                }, CONFIG.kit.teleportTimeout);
+                
+            } catch (error) {
+                logger.error(`Error during kit delivery: ${error.message}`);
+                finishKit(username, false);
+            }
+        }, CONFIG.kit.deliveryDelay);
+    } catch (error) {
+        logger.error(`Error starting kit delivery: ${error.message}`);
+        finishKit(username, false);
+    }
 }
 
 function startPositionWatcher(username) {
     if (!mcBot || !mcBot.entity || !state.initialPosition) return;
     
-    const checkInterval = 500; // Check every 500ms
+    const checkInterval = 500;
     let lastPosition = { ...state.initialPosition };
-    let hasLogged = false; // Flag to prevent multiple logging
+    let hasLogged = false;
     
     state.positionWatcher = setInterval(async () => {
         if (!mcBot || !mcBot.entity || !state.kitInProgress || state.currentKitAsker !== username || hasLogged) {
@@ -800,16 +782,11 @@ function startPositionWatcher(username) {
             Math.pow(currentPos.z - lastPosition.z, 2)
         );
         
-        // If bot moved significantly (teleported), log coordinates
-        if (distance > 5) { // Threshold to detect teleportation
-            hasLogged = true; // Set flag to prevent multiple executions
-            logger.info(`Position change detected for ${username}, logging coordinates`);
-            
-            // Clear the position watcher immediately
+        if (distance > 5) {
+            hasLogged = true;
             clearInterval(state.positionWatcher);
             state.positionWatcher = null;
             
-            // Clear the TPA timeout since teleport was successful
             if (state.tpaTimeout) {
                 clearTimeout(state.tpaTimeout);
                 state.tpaTimeout = null;
@@ -828,31 +805,8 @@ function startPositionWatcher(username) {
     }, checkInterval);
 }
 
-// Handle spawn distance error messages
-function handleSpawnDistanceError(username) {
-    logger.info(`Spawn distance error for ${username}, retrying kit delivery`);
-    safeChat('/kill');
-    
-    // Reset state and restart kit delivery for the same user
-    setTimeout(() => {
-        if (state.currentKitAsker === username) {
-            startKitDelivery(username);
-        }
-    }, 2000);
-}
-
-// This function should be called when receiving chat messages
-function handleChatMessage(message) {
-    const spawnDistancePattern = /You must be 15000 blocks from spawn in order to use \/(?:home|tpa)/i;
-    
-    if (spawnDistancePattern.test(message) && state.kitInProgress && state.currentKitAsker) {
-        handleSpawnDistanceError(state.currentKitAsker);
-    }
-}
-
 async function finishKit(username, shouldLog = false) {
     try {
-        // Clear position watcher
         if (state.positionWatcher) {
             clearInterval(state.positionWatcher);
             state.positionWatcher = null;
@@ -938,7 +892,6 @@ function handleKitRequest(username) {
     startKitDelivery(username);
 }
 
-// Enhanced spammer system
 async function loadSpamMessages() {
     try {
         const filePath = path.resolve(CONFIG.spammer.filePath);
@@ -978,18 +931,15 @@ async function startSpammer() {
             index = (index + 1) % spamLines.length;
         }
         
-        // Add random delay variation
         const randomDelay = Math.floor(Math.random() * CONFIG.spammer.randomDelay);
         setTimeout(sendSpamMessage, CONFIG.spammer.interval + randomDelay);
     };
     
-    // Start with initial delay
     setTimeout(sendSpamMessage, CONFIG.spammer.interval);
     logger.info(`Spammer started with ${spamLines.length} messages`);
 }
 
 function handleDevCommand(username) {
-    // Only allow 0xPwnd to use this command
     if (username.toLowerCase() !== '0xpwnd') {
         safeChat(`/msg ${username} &4&l❌ You don't have permission to use this command.`);
         return;
@@ -998,10 +948,8 @@ function handleDevCommand(username) {
     const newState = state.toggleDevMode();
 
     if (newState) {
-        // Dev mode enabled - kit system disabled for non-VIPs
         safeChat(`/msg ${username} &1&l🔧 Dev mode ENABLED. Kit system is now restricted to VIP users only.`);
 
-        // Clear the current queue of non-VIP users
         const originalQueueLength = state.kitQueue.length;
         state.kitQueue = state.kitQueue.filter(user => state.isVip(user));
         const removedUsers = originalQueueLength - state.kitQueue.length;
@@ -1010,30 +958,25 @@ function handleDevCommand(username) {
             safeChat(`🔧 Maintenance mode enabled. ${removedUsers} non-VIP users removed from queue.`);
         }
 
-        // If current kit delivery is for a non-VIP user, cancel it
         if (state.currentKitAsker && !state.isVip(state.currentKitAsker)) {
             safeChat(`/msg ${state.currentKitAsker} &c&l🔧 Kit delivery cancelled due to maintenance mode.`);
             finishKit(state.currentKitAsker, false);
         }
 
-        // Send notification to Discord
         sendToDiscord(process.env.DISCORD_CHANNEL_ID, 
             `🔧 **Dev Mode Enabled** by ${username}\nKit system restricted to VIP users only.`, 
             false);
 
     } else {
-        // Dev mode disabled - kit system available for everyone
         safeChat(`/msg ${username} &1&l✅ Dev mode DISABLED. Kit system is now available for all users.`);
         safeChat(`📦 Kit system is back online! Type $kit to get your free items.`);
 
-        // Send notification to Discord
         sendToDiscord(process.env.DISCORD_CHANNEL_ID, 
             `✅ **Dev Mode Disabled** by ${username}\nKit system is now available for all users.`, 
             false);
     }
 }
 
-// Enhanced bot initialization
 function setupBotEvents() {
     mcBot.on('login', () => {
         logger.info(`Logged into Minecraft as ${mcBot.username || 'Unknown'}`);
@@ -1059,7 +1002,6 @@ function setupBotEvents() {
         state.botHealth = health;
         if (health <= CONFIG.minecraft.healthThreshold) {
             logger.warn(`Bot health critical: ${health}/20`);
-            // Auto-heal if possible
             const foodItems = mcBot.inventory.items().filter(item => 
                 ['bread', 'apple', 'cooked_beef', 'cooked_pork'].includes(item.name)
             );
@@ -1101,17 +1043,11 @@ function setupBotEvents() {
         scheduleReconnect();
     });
 
-    // Enhanced chat handler
     mcBot.on('chat', async (username, message) => {
         if (username === mcBot.username) return;
         
         state.stats.messagesReceived++;
-        const spawnDistancePattern = /You must be 15000 blocks from spawn in order to use \/(?:home|tpa)/i;
-        if (spawnDistancePattern.test(message) && state.kitInProgress && state.currentKitAsker) {
-            handleSpawnDistanceError(state.currentKitAsker);
-            return;
-        }
-        // Login detection  
+
         if (message.includes('You have successfully logged in') || 
             message.includes('Successfully logged in') ||
             message.includes('Login successful')) {
@@ -1124,7 +1060,6 @@ function setupBotEvents() {
             }
         }
     
-        // Forward to Discord with enhanced formatting
         try {
             const cleanMessage = sanitizeMessage(message);
             const timestamp = Math.floor(Date.now() / 1000);
@@ -1136,7 +1071,6 @@ function setupBotEvents() {
             logger.error(`Error forwarding message to Discord: ${error.message}`);
         }
 
-        // Enhanced command handling
         const cmd = message.trim().toLowerCase();
         const args = message.trim().split(' ');
         const command = args[0].toLowerCase();
@@ -1207,10 +1141,9 @@ function setupBotEvents() {
             const fakeZ = Math.floor(Math.random() * 1000000) - 500000;
             safeChat(`/msg ${username} &6&l📍 My coordinates: ${fakeX}, ${fakeY}, ${fakeZ}`);
         } else if (cmd === '$ping') {
-            let target = username; // Default to the command issuer
+            let target = username;
             if (args.length > 1) {
                 target = args[1];
-                // Case-insensitive lookup
                 const playerKeys = Object.keys(mcBot.players).map(k => k.toLowerCase());
                 const targetKey = playerKeys.find(k => k === target.toLowerCase());
                 if (!targetKey) {
@@ -1275,12 +1208,11 @@ function initBot() {
     }
 }
 
-// Enhanced inventory management
 async function dropInventory() {
     try {
         if (!mcBot || !mcBot.inventory) {
             logger.warn('Bot inventory not available');
-            return false;$
+            return false;
         }
         
         const items = mcBot.inventory.items();
@@ -1297,7 +1229,6 @@ async function dropInventory() {
     }
 }
 
-// Enhanced Discord event handlers
 discordClient.on('ready', () => {
     logger.info(`Discord bot logged in as ${discordClient.user.tag}`);
 });
@@ -1595,7 +1526,6 @@ discordClient.on('messageCreate', async (msg) => {
 
                 case 'giveaway':
                     if (args.length === 0) {
-                        // Show giveaway status
                         if (giveawayManager.hasActiveGiveaway()) {
                             const info = giveawayManager.getGiveawayInfo();
                             if (info.success) {
@@ -1626,7 +1556,6 @@ discordClient.on('messageCreate', async (msg) => {
                                     break;
                                 }
 
-                                // Parse arguments - handle quoted strings
                                 const fullArgs = content.slice(content.indexOf('create') + 6).trim();
                                 const matches = fullArgs.match(/"([^"]+)"\s+"([^"]+)"\s+(\d+)/);
 
@@ -1639,7 +1568,7 @@ discordClient.on('messageCreate', async (msg) => {
                                 const prize = matches[2];
                                 const duration = parseInt(matches[3]);
 
-                                if (duration < 1 || duration > 1440) { // Max 24 hours
+                                if (duration < 1 || duration > 1440) {
                                     await msg.reply('❌ Duration must be between 1 and 1440 minutes (24 hours)');
                                     break;
                                 }
@@ -1714,7 +1643,6 @@ discordClient.on('messageCreate', async (msg) => {
             await msg.reply('❌ An error occurred while executing the command.');
         }
     } else if (content && state.isConnected && state.isLoggedIn) {
-        // Forward Discord messages to Minecraft
         if (await safeChat(content)) {
             await msg.react('✅');
         } else {
@@ -1723,7 +1651,6 @@ discordClient.on('messageCreate', async (msg) => {
     }
 });
 
-// Enhanced error handling
 process.on('uncaughtException', (error) => {
     logger.error(`Uncaught exception: ${error.message}`, error.stack);
 });
@@ -1732,7 +1659,6 @@ process.on('unhandledRejection', (reason, promise) => {
     logger.error(`Unhandled rejection: ${reason}`);
 });
 
-// Graceful shutdown
 process.on('SIGINT', () => {
     logger.info('Shutting down gracefully...');
     state.reset();
@@ -1747,7 +1673,6 @@ process.on('SIGTERM', () => {
     process.exit(0);
 });
 
-// State event listeners for enhanced logging
 state.on('kitDelivered', (data) => {
     logger.info(`Kit delivered to ${data.username} at ${data.position.x}, ${data.position.y}, ${data.position.z}`);
 });
@@ -1764,7 +1689,6 @@ state.on('reset', () => {
     logger.info('Bot state reset');
 });
 
-// Configuration validation
 function validateConfig() {
     const required = [
         'DISCORD_TOKEN',
@@ -1782,16 +1706,13 @@ function validateConfig() {
     logger.info('Configuration validated successfully');
 }
 
-// Startup sequence
 async function startup() {
     try {
         logger.info('Starting Enhanced Minecraft Bot...');
         validateConfig();
         
-        // Initialize Discord client
         await discordClient.login(process.env.DISCORD_TOKEN);
         
-        // Wait for Discord to be ready
         await new Promise(resolve => {
             if (discordClient.isReady()) {
                 resolve();
@@ -1809,5 +1730,4 @@ async function startup() {
     }
 }
 
-// Start the bot
 startup();
