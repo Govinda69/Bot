@@ -4,9 +4,8 @@ const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder
 const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
-const http = require('http'); // Added for Render Web Service health check
+const http = require('http');
 
-// Enhanced Configuration with validation
 const CONFIG = {
     minecraft: {
         host: process.env.MC_HOST || '8b8t.me',
@@ -29,7 +28,13 @@ const CONFIG = {
         proximityDistance: 5,
         tpaAcceptDelay: 2000,
         maxQueueSize: 50,
-        autoCleanupInterval: 600000
+        autoCleanupInterval: 600000,
+        types: {
+            default: { command: '/home kit' },
+            pvp: { command: '/home kit' },
+            greif: { command: '/home greif' },
+            regear: { command: '/home regear' }
+        }
     },
     spammer: {
         interval: 40000,
@@ -47,7 +52,6 @@ const CONFIG = {
     }
 };
 
-// Enhanced State Management with persistence
 class BotState extends EventEmitter {
     constructor() {
         super();
@@ -57,6 +61,7 @@ class BotState extends EventEmitter {
         this.kitQueue = [];
         this.devModeEnabled = false;
         this.currentKitAsker = null;
+        this.currentKitType = null;
         this.spammerInterval = null;
         this.spammerStarted = false;
         this.reconnectAttempts = 0;
@@ -85,6 +90,7 @@ class BotState extends EventEmitter {
         this.kitInProgress = false;
         this.kitQueue = [];
         this.currentKitAsker = null;
+        this.currentKitType = null;
         this.stopSpammer();
         this.isConnected = false;
         this.isLoggedIn = false;
@@ -98,9 +104,7 @@ class BotState extends EventEmitter {
 
     clearTimeouts() {
         [this.loginTimeout, this.tpaTimeout].forEach(timeout => {
-            if (timeout) {
-                clearTimeout(timeout);
-            }
+            if (timeout) clearTimeout(timeout);
         });
         this.loginTimeout = null;
         this.tpaTimeout = null;
@@ -128,11 +132,8 @@ class BotState extends EventEmitter {
     cleanupOldCooldowns() {
         const now = Date.now();
         const maxAge = Math.max(CONFIG.kit.cooldownTime, CONFIG.kit.vipCooldownTime) * 2;
-        
         for (const [user, timestamp] of this.cooldowns.entries()) {
-            if (now - timestamp > maxAge) {
-                this.cooldowns.delete(user);
-            }
+            if (now - timestamp > maxAge) this.cooldowns.delete(user);
         }
     }
 
@@ -155,7 +156,6 @@ class BotState extends EventEmitter {
     }
 }
 
-// Enhanced Giveaway System
 class GiveawayManager extends EventEmitter {
     constructor() {
         super();
@@ -176,21 +176,19 @@ class GiveawayManager extends EventEmitter {
         }
 
         const endTime = Date.now() + (durationMinutes * 60 * 1000);
-
         this.activeGiveaway = {
             id: Math.random().toString(36).substr(2, 9),
-            title: title,
-            prize: prize,
+            title,
+            prize,
             duration: durationMinutes,
             startTime: Date.now(),
-            endTime: endTime,
+            endTime,
             participants: new Set(),
-            createdBy: createdBy,
+            createdBy,
             active: true
         };
 
         this.startGiveawaySpammer();
-
         this.activeGiveaway.autoEndTimer = setTimeout(() => {
             this.endGiveaway(true);
         }, durationMinutes * 60 * 1000);
@@ -209,7 +207,6 @@ class GiveawayManager extends EventEmitter {
         }
 
         const cleanUsername = username.toLowerCase();
-
         if (this.activeGiveaway.participants.has(cleanUsername)) {
             return { success: false, message: 'You are already entered in this giveaway!' };
         }
@@ -217,8 +214,8 @@ class GiveawayManager extends EventEmitter {
         this.activeGiveaway.participants.add(cleanUsername);
         this.emit('participantJoined', { username, giveaway: this.activeGiveaway });
 
-        return { 
-            success: true, 
+        return {
+            success: true,
             message: `Successfully entered the giveaway! (${this.activeGiveaway.participants.size} participants)`,
             participantCount: this.activeGiveaway.participants.size
         };
@@ -252,7 +249,6 @@ class GiveawayManager extends EventEmitter {
 
         const giveaway = this.activeGiveaway;
         const participants = Array.from(giveaway.participants);
-
         let winner = null;
         if (participants.length > 0) {
             const randomIndex = Math.floor(Math.random() * participants.length);
@@ -260,19 +256,17 @@ class GiveawayManager extends EventEmitter {
         }
 
         const result = {
-            giveaway: giveaway,
-            winner: winner,
+            giveaway,
+            winner,
             participantCount: participants.length,
-            autoEnd: autoEnd
+            autoEnd
         };
 
         this.stopGiveawaySpammer();
-
         this.activeGiveaway.active = false;
         this.activeGiveaway = null;
-
         this.emit('giveawayEnded', result);
-        return { success: true, result: result };
+        return { success: true, result };
     }
 
     cancelGiveaway() {
@@ -285,20 +279,14 @@ class GiveawayManager extends EventEmitter {
         }
 
         const giveaway = this.activeGiveaway;
-
         this.stopGiveawaySpammer();
-
         this.activeGiveaway = null;
-
         this.emit('giveawayCancelled', giveaway);
-        return { success: true, giveaway: giveaway };
+        return { success: true, giveaway };
     }
 
     startGiveawaySpammer() {
-        if (state.spammerInterval) {
-            state.stopSpammer();
-        }
-
+        if (state.spammerInterval) state.stopSpammer();
         if (this.giveawaySpammerActive) return;
 
         this.giveawaySpammerActive = true;
@@ -345,7 +333,6 @@ class GiveawayManager extends EventEmitter {
 
     getStats() {
         if (!this.activeGiveaway) return null;
-
         return {
             title: this.activeGiveaway.title,
             prize: this.activeGiveaway.prize,
@@ -401,7 +388,6 @@ giveawayManager.on('giveawayEnded', async (result) => {
         await safeChat(`🏆 ${winner} won: ${giveaway.prize}`);
         await delay(1000);
         await safeChat(`🎊 Congratulations ${winner}!`);
-
         await safeChat(`/msg ${winner} &5🎉 CONGRATULATIONS! You won the giveaway! Prize: ${giveaway.prize}. Contact staff to claim your prize!`);
 
         const winnerEmbed = createEmbed(
@@ -420,7 +406,6 @@ giveawayManager.on('giveawayEnded', async (result) => {
         await sendToDiscord(process.env.DISCORD_CHANNEL_ID, winnerEmbed, true);
     } else {
         await safeChat(`🎉 Giveaway ended - No participants!`);
-
         const noWinnerEmbed = createEmbed(
             '🎉 Giveaway Ended - No Winner',
             `**Prize:** ${giveaway.prize}\n` +
@@ -482,7 +467,6 @@ class Logger {
         if (this.levels[level] >= this.levels[this.logLevel]) {
             const timestamp = new Date().toISOString();
             const logMsg = `[${level.toUpperCase()}] ${timestamp}: ${msg}`;
-            
             if (level === 'error') {
                 console.error(logMsg, data || '');
             } else if (level === 'warn') {
@@ -512,7 +496,6 @@ const formatUptime = (ms) => {
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    
     if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
@@ -530,12 +513,10 @@ class ChatManager {
     async safeChat(message, priority = false, bypassLoginCheck = false) {
         const allowedCommands = ['/login', '/8b8t', '/help'];
         const isAllowedCommand = allowedCommands.some(cmd => message.startsWith(cmd));
-        
         if (!mcBot || !mcBot._client || !state.isConnected) {
             logger.warn(`Cannot send message - bot not connected: ${message}`);
             return false;
         }
-        
         if (!state.isLoggedIn && !bypassLoginCheck && !isAllowedCommand) {
             logger.warn(`Cannot send message - bot not logged in: ${message}`);
             return false;
@@ -549,32 +530,27 @@ class ChatManager {
 
         return new Promise((resolve) => {
             const messageItem = { message: cleanMessage, resolve, priority };
-            
             if (priority) {
                 this.messageQueue.unshift(messageItem);
             } else {
                 this.messageQueue.push(messageItem);
             }
-            
             this.processQueue();
         });
     }
 
     async processQueue() {
         if (this.processing || this.messageQueue.length === 0) return;
-        
         this.processing = true;
-        
+
         while (this.messageQueue.length > 0) {
             const now = Date.now();
             const timeSinceLastMessage = now - this.lastMessageTime;
-            
             if (timeSinceLastMessage < this.minDelay) {
                 await delay(this.minDelay - timeSinceLastMessage);
             }
-            
+
             const { message, resolve } = this.messageQueue.shift();
-            
             try {
                 mcBot.chat(message);
                 logger.debug(`Sent: ${message}`);
@@ -584,10 +560,8 @@ class ChatManager {
                 logger.error(`Failed to send chat message: ${error.message}`);
                 resolve(false);
             }
-            
             await delay(500);
         }
-        
         this.processing = false;
     }
 }
@@ -602,11 +576,7 @@ function createEmbed(title, description, color = CONFIG.discord.embedColor.info,
         .setDescription(description)
         .setColor(color)
         .setTimestamp();
-    
-    if (fields.length > 0) {
-        embed.addFields(fields);
-    }
-    
+    if (fields.length > 0) embed.addFields(fields);
     return embed;
 }
 
@@ -619,15 +589,9 @@ async function sendToDiscord(channelId, content, isEmbed = false, components = n
         }
 
         const messageOptions = {};
-        if (isEmbed) {
-            messageOptions.embeds = [content];
-        } else {
-            messageOptions.content = content;
-        }
-        
-        if (components) {
-            messageOptions.components = components;
-        }
+        if (isEmbed) messageOptions.embeds = [content];
+        else messageOptions.content = content;
+        if (components) messageOptions.components = components;
 
         return await channel.send(messageOptions);
     } catch (error) {
@@ -643,42 +607,31 @@ async function performLoginSequence() {
 
     state.loginInProgress = true;
     state.loginAttempts++;
-    
     logger.info(`Starting login sequence (attempt ${state.loginAttempts})`);
-    
+
     try {
         await delay(CONFIG.minecraft.loginDelay);
-        
         logger.info('Sending login command...');
         if (!(await safeChat('/login govinda', true, true))) {
             throw new Error('Failed to send login command');
         }
-        
         await delay(3000);
-        
         logger.info('Sending 8b8t command...');
         if (!(await safeChat('/8b8t', true, true))) {
             throw new Error('Failed to send 8b8t command');
         }
-        
         await delay(2000);
-        
         state.isLoggedIn = true;
         state.loginInProgress = false;
         state.loginAttempts = 0;
-        
         logger.info('Login sequence completed successfully');
-        
         await delay(1000);
         await safeChat("🤖 Bot online - Enhanced kit system ready!");
-        
         await delay(2000);
         await startSpammer();
-        
     } catch (error) {
         logger.error(`Login sequence failed: ${error.message}`);
         state.loginInProgress = false;
-        
         if (state.loginAttempts < CONFIG.minecraft.loginMaxRetries) {
             logger.info(`Retrying login sequence in 5 seconds...`);
             setTimeout(performLoginSequence, 5000);
@@ -689,41 +642,40 @@ async function performLoginSequence() {
     }
 }
 
-async function logKitDelivery(username, position, dimension) {
+async function logKitDelivery(username, position, dimension, kitType) {
     const coords = {
         x: Math.floor(position.x),
         y: Math.floor(position.y),
         z: Math.floor(position.z)
     };
-    
-    const message = `{${coords.x}, ${coords.y}, ${coords.z}} in ${dimension} by ${username}`;
-
+    const message = `{${coords.x}, ${coords.y}, ${coords.z}} in ${dimension} by ${username} (Kit: ${kitType})`;
     await sendToDiscord(process.env.COORDS_CHANNEL_ID, message, false);
     state.stats.kitsDelivered++;
-    state.emit('kitDelivered', { username, position: coords, dimension });
+    state.emit('kitDelivered', { username, position: coords, dimension, kitType });
 }
 
-async function startKitDelivery(username) {
+async function startKitDelivery(username, kitType = 'default') {
     state.kitInProgress = true;
     state.currentKitAsker = username;
+    state.currentKitType = kitType;
     state.initialPosition = null;
     state.positionWatcher = null;
 
-    logger.info(`Starting kit delivery for ${username}`);
+    logger.info(`Starting ${kitType} kit delivery for ${username}`);
     
     try {
-        // Check if bot is within 15000 blocks of spawn (0,0)
         if (mcBot && mcBot.entity) {
             const pos = mcBot.entity.position;
             const distanceFromSpawn = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
             if (distanceFromSpawn < 15000) {
                 logger.info(`Bot is within 15000 blocks of spawn (${distanceFromSpawn.toFixed(2)} blocks), executing /kill`);
                 await safeChat('/kill', true);
-                await delay(2000); // Wait for respawn
+                await delay(2000);
             }
         }
 
-        if (!(await safeChat('/home kit', true))) {
+        const kitCommand = CONFIG.kit.types[kitType]?.command || CONFIG.kit.types.default.command;
+        if (!(await safeChat(kitCommand, true))) {
             finishKit(username, false);
             return;
         }
@@ -736,12 +688,11 @@ async function startKitDelivery(username) {
                         y: mcBot.entity.position.y,
                         z: mcBot.entity.position.z
                     };
-                    
-                    startPositionWatcher(username);
+                    startPositionWatcher(username, kitType);
                 }
                 
                 await safeChat(`/tpa ${username}`, true);
-                await safeChat(`/msg ${username} &6&l📦 Your kit is ready! Please accept the TPA (&9&l/tpayes ${CONFIG.minecraft.username}) &6within 25 seconds.`, true);
+                await safeChat(`/msg ${username} &6&l📦 Your ${kitType} kit is ready! Please accept the TPA (&9&l/tpayes ${CONFIG.minecraft.username}) &6within 25 seconds.`, true);
                 
                 state.tpaTimeout = setTimeout(() => {
                     if (state.kitInProgress && state.currentKitAsker === username) {
@@ -752,17 +703,17 @@ async function startKitDelivery(username) {
                 }, CONFIG.kit.teleportTimeout);
                 
             } catch (error) {
-                logger.error(`Error during kit delivery: ${error.message}`);
+                logger.error(`Error during ${kitType} kit delivery: ${error.message}`);
                 finishKit(username, false);
             }
         }, CONFIG.kit.deliveryDelay);
     } catch (error) {
-        logger.error(`Error starting kit delivery: ${error.message}`);
+        logger.error(`Error starting ${kitType} kit delivery: ${error.message}`);
         finishKit(username, false);
     }
 }
 
-function startPositionWatcher(username) {
+function startPositionWatcher(username, kitType) {
     if (!mcBot || !mcBot.entity || !state.initialPosition) return;
     
     const checkInterval = 500;
@@ -794,8 +745,8 @@ function startPositionWatcher(username) {
             }
             
             const dimension = mcBot.game.dimension;
-            await logKitDelivery(username, currentPos, dimension);
-            await safeChat(`/msg ${username} &2&l✅ Kit delivered! Enjoy your items.`);
+            await logKitDelivery(username, currentPos, dimension, kitType);
+            await safeChat(`/msg ${username} &2&l✅ ${kitType.charAt(0).toUpperCase() + kitType.slice(1)} kit delivered! Enjoy your items.`);
             await safeChat('/kill');
             
             finishKit(username, false);
@@ -816,12 +767,10 @@ async function finishKit(username, shouldLog = false) {
         if (shouldLog && mcBot && mcBot.entity) {
             const pos = mcBot.entity.position;
             const dimension = mcBot.game.dimension;
-            await logKitDelivery(username, pos, dimension);
+            await logKitDelivery(username, pos, dimension, state.currentKitType || 'default');
         }
         
-        if (shouldLog) {
-            await safeChat('/kill');
-        }
+        if (shouldLog) await safeChat('/kill');
         
         state.cooldowns.set(username, Date.now());
         logger.info(`Kit delivery completed for ${username}`);
@@ -830,6 +779,7 @@ async function finishKit(username, shouldLog = false) {
     } finally {
         state.kitInProgress = false;
         state.currentKitAsker = null;
+        state.currentKitType = null;
         state.initialPosition = null;
         
         if (state.positionWatcher) {
@@ -843,18 +793,18 @@ async function finishKit(username, shouldLog = false) {
         }
 
         if (state.kitQueue.length > 0) {
-            const nextUser = state.kitQueue.shift();
+            const [nextUser, nextKitType] = state.kitQueue.shift();
             await delay(2000);
-            startKitDelivery(nextUser);
+            startKitDelivery(nextUser, nextKitType);
         }
     }
 }
 
-function handleKitRequest(username) {
+function handleKitRequest(username, kitType = 'default') {
     const cleanName = username.toLowerCase();
     
     if (blacklistedUsers.has(cleanName)) {
-        safeChat(`/msg ${username} &4&l❌ You are currently banned from using $kit. Contact &50xPwnd &4<o appeal.`);
+        safeChat(`/msg ${username} &4&l❌ You are currently banned from using $kit. Contact &50xPwnd &4to appeal.`);
         return;
     }
     if (state.devModeEnabled && !state.isVip(username)) {
@@ -874,25 +824,34 @@ function handleKitRequest(username) {
         return;
     }
 
+    if (!CONFIG.kit.types[kitType]) {
+        safeChat(`/msg ${username} &4&l❌ Invalid kit type. Available kits: default, pvp, greif, regear (Usage: $kit [type])`);
+        return;
+    }
+
     if (state.kitInProgress) {
-        if (state.currentKitAsker === username) {
-            safeChat(`/msg ${username} &e&l📦 Your kit is already being prepared.`);
-        } else if (!state.kitQueue.includes(username)) {
+        if (state.currentKitAsker === username && state.currentKitType === kitType) {
+            safeChat(`/msg ${username} &e&l📦 Your ${kitType} kit is already being prepared.`);
+        } else if (!state.kitQueue.some(([user, type]) => user === username && type === kitType)) {
             if (state.kitQueue.length >= CONFIG.kit.maxQueueSize) {
                 safeChat(`/msg ${username} &4&l❌ Queue is full. Please try again later.`);
                 return;
             }
-            state.kitQueue.push(username);
-            safeChat(`/msg ${username} &2&l📋 Added to queue. Position: ${state.kitQueue.length}`);
+            state.kitQueue.push([username, kitType]);
+            safeChat(`/msg ${username} &2&l📋 Added to queue for ${kitType} kit. Position: ${state.kitQueue.length}`);
         } else {
-            safeChat(`/msg ${username} &e&l📋 You're already in the queue.`);
+            safeChat(`/msg ${username} &e&l📋 You're already in the queue for a ${kitType} kit.`);
         }
         return;
     }
 
-    startKitDelivery(username);
-}
+    startKitDelivery(username, kitType);
 
+    // Send kit type info message only for default kit ($kit)
+    if (kitType === 'default') {
+        safeChat(`/msg ${username} &6&l📦 I also have other kits! Try them too. &3&lAvailable kits: default, pvp, greif, regear &9&l(Usage: $kit [type])`);
+    }
+}
 async function loadSpamMessages() {
     try {
         const filePath = path.resolve(CONFIG.spammer.filePath);
@@ -947,31 +906,24 @@ function handleDevCommand(username) {
     }
 
     const newState = state.toggleDevMode();
-
     if (newState) {
-        safeChat(`/msg ${username} &1&l🔧 Dev mode ENABLED. Kit system is now restricted to VIP users only.`);
-
+        safeChat(`/msg ${username} &1&l🔷 Dev mode ENABLED. Kit system is now restricted to VIP users only.`);
         const originalQueueLength = state.kitQueue.length;
-        state.kitQueue = state.kitQueue.filter(user => state.isVip(user));
+        state.kitQueue = state.kitQueue.filter(([user]) => state.isVip(user));
         const removedUsers = originalQueueLength - state.kitQueue.length;
-
         if (removedUsers > 0) {
-            safeChat(`🔧 Maintenance mode enabled. ${removedUsers} non-VIP users removed from queue.`);
+            safeChat(`🔷 Maintenance mode enabled. ${removedUsers} non-VIP users removed from queue.`);
         }
-
         if (state.currentKitAsker && !state.isVip(state.currentKitAsker)) {
-            safeChat(`/msg ${state.currentKitAsker} &c&l🔧 Kit delivery cancelled due to maintenance mode.`);
+            safeChat(`/msg ${state.currentKitAsker} &c&l🔷 Kit delivery cancelled due to maintenance mode.`);
             finishKit(state.currentKitAsker, false);
         }
-
         sendToDiscord(process.env.DISCORD_CHANNEL_ID, 
-            `🔧 **Dev Mode Enabled** by ${username}\nKit system restricted to VIP users only.`, 
+            `🔷 **Dev Mode Enabled** by ${username}\nKit system restricted to VIP users only.`, 
             false);
-
     } else {
         safeChat(`/msg ${username} &1&l✅ Dev mode DISABLED. Kit system is now available for all users.`);
         safeChat(`📦 Kit system is back online! Type $kit to get your free items.`);
-
         sendToDiscord(process.env.DISCORD_CHANNEL_ID, 
             `✅ **Dev Mode Disabled** by ${username}\nKit system is now available for all users.`, 
             false);
@@ -987,15 +939,9 @@ function setupBotEvents() {
 
     mcBot.on('spawn', async () => {
         logger.info('Bot spawned');
-        
-        if (state.loginTimeout) {
-            clearTimeout(state.loginTimeout);
-        }
-        
+        if (state.loginTimeout) clearTimeout(state.loginTimeout);
         state.loginTimeout = setTimeout(() => {
-            if (!state.isLoggedIn && !state.loginInProgress) {
-                performLoginSequence();
-            }
+            if (!state.isLoggedIn && !state.loginInProgress) performLoginSequence();
         }, 2000);
     });
     
@@ -1015,9 +961,7 @@ function setupBotEvents() {
     });
     
     mcBot.on('move', () => {
-        if (mcBot.entity) {
-            state.botPosition = mcBot.entity.position;
-        }
+        if (mcBot.entity) state.botPosition = mcBot.entity.position;
     });
     
     mcBot.on('error', (err) => {
@@ -1029,12 +973,10 @@ function setupBotEvents() {
         const reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
         logger.warn(`Bot kicked: ${reasonText}`);
         state.reset();
-        
         if (reasonText.includes('too fast') || reasonText.includes('login')) {
             CONFIG.minecraft.reconnectDelay = Math.min(CONFIG.minecraft.reconnectDelay * 1.5, 120000);
             logger.info(`Increased reconnect delay to ${CONFIG.minecraft.reconnectDelay}ms due to rate limiting`);
         }
-        
         scheduleReconnect();
     });
     
@@ -1046,7 +988,6 @@ function setupBotEvents() {
 
     mcBot.on('chat', async (username, message) => {
         if (username === mcBot.username) return;
-        
         state.stats.messagesReceived++;
 
         if (message.includes('You have successfully logged in') || 
@@ -1072,21 +1013,26 @@ function setupBotEvents() {
             logger.error(`Error forwarding message to Discord: ${error.message}`);
         }
 
-        const cmd = message.trim().toLowerCase();
         const args = message.trim().split(' ');
         const command = args[0].toLowerCase();
 
-        if (cmd === '$kit') {
-            handleKitRequest(username);
-        } else if (cmd === '$queue') {
+        if (command === '$kit') {
+            const kitType = args[1]?.toLowerCase() || 'default';
+            if (kitType === 'help') {
+                safeChat(`/msg ${username} &6&l📦 Available kits: default, pvp, greif, regear (Usage: $kit [type])`);
+            } else {
+                handleKitRequest(username, kitType);
+            }
+        } else if (command === '$queue') {
             if (state.kitQueue.length > 0) {
-                safeChat(`/msg ${username} &6&l📋 Queue (${state.kitQueue.length}): ${state.kitQueue.join(', ')}`);
+                const queueList = state.kitQueue.map(([user, type], index) => `${index + 1}. ${user} (${type})`).join(', ');
+                safeChat(`/msg ${username} &6&l📋 Queue (${state.kitQueue.length}): ${queueList}`);
             } else {
                 safeChat(`/msg ${username} &c&l📋 Queue is empty`);
             }
-        } else if (cmd === '$dev') {
+        } else if (command === '$dev') {
             handleDevCommand(username);
-        } else if (cmd === '$health') {
+        } else if (command === '$health') {
             if (state.isVip(username)) {
                 const health = state.botHealth || 20;
                 const healthBar = '█'.repeat(Math.floor(health / 2)) + '░'.repeat(10 - Math.floor(health / 2));
@@ -1094,7 +1040,7 @@ function setupBotEvents() {
             } else {
                 safeChat(`/msg ${username} &4&l❌ VIP access required`);
             }
-        } else if (cmd === '$giveaway') {
+        } else if (command === '$giveaway') {
             if (args.length === 1) {
                 const result = giveawayManager.joinGiveaway(username);
                 if (result.success) {
@@ -1116,7 +1062,7 @@ function setupBotEvents() {
                     safeChat(`/msg ${username} ❌ ${info.message}`);
                 }
             }
-        } else if (cmd === '$ban') {
+        } else if (command === '$ban') {
             if (args.length < 2) {
                 safeChat(`/msg ${username} &4&l❌ Usage: $ban <player> [reason]`);
                 return;
@@ -1124,7 +1070,7 @@ function setupBotEvents() {
             const target = args[1];
             const reason = args.slice(2).join(' ') || 'No reason specified';
             safeChat(`[Server] ${target} has been banned by ${username} for: ${reason}`);
-        } else if (cmd === '$bestping') {
+        } else if (command === '$bestping') {
             if (!mcBot.players || Object.keys(mcBot.players).length === 0) {
                 safeChat(`/msg ${username} &4&l❌ No players online`);
                 return;
@@ -1136,12 +1082,12 @@ function setupBotEvents() {
             }
             const bestPingPlayer = players.reduce((min, p) => p.ping < min.ping ? p : min, players[0]);
             safeChat(`/msg ${username} &6&l🏆 Player with best ping: ${bestPingPlayer.username} (${bestPingPlayer.ping}ms)`);
-        } else if (cmd === '$coords') {
+        } else if (command === '$coords') {
             const fakeX = Math.floor(Math.random() * 1000000) - 500000;
             const fakeY = Math.floor(Math.random() * 256);
             const fakeZ = Math.floor(Math.random() * 1000000) - 500000;
             safeChat(`/msg ${username} &6&l📍 My coordinates: ${fakeX}, ${fakeY}, ${fakeZ}`);
-        } else if (cmd === '$ping') {
+        } else if (command === '$ping') {
             let target = username;
             if (args.length > 1) {
                 target = args[1];
@@ -1155,13 +1101,13 @@ function setupBotEvents() {
             }
             const ping = mcBot.players[target]?.ping || 0;
             safeChat(`/msg ${username} &6&l📡 ${target}'s ping: ${ping}ms`);
-        } else if (cmd === '$seed') {
-            safeChat(` /msg ${username} &6&l🌱 Server seed: -9079062558503125353`);
-        } else if (cmd === '$tps') {
+        } else if (command === '$seed') {
+            safeChat(`/msg ${username} &6&l🌱 Server seed: -9079062558503125353`);
+        } else if (command === '$tps') {
             const tps = mcBot.getServerTickRate ? mcBot.getServerTickRate() : 20;
             const lagStatus = tps >= 18 ? '&2&lGood' : tps >= 10 ? '&6&lModerate' : '&4&lLagging';
             safeChat(`/msg ${username} &6&l📊 Server TPS: ${tps.toFixed(1)} (${lagStatus}&6&l)`);
-        } else if (cmd === '$worstping') {
+        } else if (command === '$worstping') {
             if (!mcBot.players || Object.keys(mcBot.players).length === 0) {
                 safeChat(`/msg ${username} &4&l❌ No players online`);
                 return;
@@ -1185,14 +1131,12 @@ function scheduleReconnect() {
     
     state.reconnectAttempts++;
     const delay = CONFIG.minecraft.reconnectDelay * Math.min(state.reconnectAttempts, 3);
-    
     logger.info(`Reconnecting in ${delay}ms (attempt ${state.reconnectAttempts})`);
     setTimeout(initBot, delay);
 }
 
 function initBot() {
     state.reset();
-    
     try {
         mcBot = mineflayer.createBot({
             host: CONFIG.minecraft.host,
@@ -1201,7 +1145,6 @@ function initBot() {
             version: CONFIG.minecraft.version,
             auth: 'offline'
         });
-
         setupBotEvents();
     } catch (error) {
         logger.error(`Failed to create bot: ${error.message}`);
@@ -1218,7 +1161,6 @@ async function dropInventory() {
         
         const items = mcBot.inventory.items();
         logger.info(`Dropping ${items.length} items`);
-        
         for (const item of items) {
             await mcBot.tossStack(item);
             await delay(100);
@@ -1238,7 +1180,6 @@ discordClient.on('messageCreate', async (msg) => {
     if (msg.author.bot || msg.channel.id !== process.env.DISCORD_CHANNEL_ID) return;
 
     const content = msg.content.trim();
-
     if (content.startsWith('$')) {
         const args = content.slice(1).split(' ');
         const command = args.shift().toLowerCase();
@@ -1249,7 +1190,6 @@ discordClient.on('messageCreate', async (msg) => {
                     const dropped = await dropInventory();
                     await msg.reply(dropped ? '✅ Dropping all inventory items...' : '❌ Failed to drop items');
                     break;
-                    
                 case 'tp':
                     if (await safeChat('/tpa 0xPwnd', true)) {
                         await msg.reply('📞 Sending teleport request...');
@@ -1257,7 +1197,6 @@ discordClient.on('messageCreate', async (msg) => {
                         await msg.reply('❌ Bot not ready');
                     }
                     break;
-                    
                 case 'tph':
                     if (await safeChat('/tpahere 0xPwnd', true)) {
                         await msg.reply('📞 Sending teleport here request...');
@@ -1265,7 +1204,6 @@ discordClient.on('messageCreate', async (msg) => {
                         await msg.reply('❌ Bot not ready');
                     }
                     break;
-                    
                 case 'login':
                     if (state.isConnected) {
                         await msg.reply('🔄 Retrying login sequence...');
@@ -1274,13 +1212,11 @@ discordClient.on('messageCreate', async (msg) => {
                         await msg.reply('❌ Bot not connected');
                     }
                     break;
-                    
                 case 'restart':
                     await msg.reply('🔄 Restarting bot...');
                     state.reset();
                     setTimeout(initBot, 2000);
                     break;
-                    
                 case 'stats':
                     const uptime = formatUptime(state.getUptime());
                     const statsEmbed = createEmbed('📊 Bot Statistics', 
@@ -1294,7 +1230,6 @@ discordClient.on('messageCreate', async (msg) => {
                     );
                     await msg.reply({ embeds: [statsEmbed] });
                     break;
-                    
                 case 'status':
                     const healthBar = '█'.repeat(Math.floor(state.botHealth / 2)) + '░'.repeat(10 - Math.floor(state.botHealth / 2));
                     const statusFields = [
@@ -1312,7 +1247,6 @@ discordClient.on('messageCreate', async (msg) => {
                         { name: '🔄 Reconnect Attempts', value: `${state.reconnectAttempts}/${CONFIG.minecraft.maxReconnectAttempts}`, inline: true },
                         { name: '💬 Spammer', value: state.spammerStarted ? '✅ Active' : '❌ Inactive', inline: true }
                     ];
-                    
                     const statusEmbed = createEmbed('🤖 Enhanced Bot Status', 
                         `**${mcBot?.username || 'Unknown'}** status overview`,
                         state.isConnected && state.isLoggedIn ? CONFIG.discord.embedColor.success : CONFIG.discord.embedColor.warning,
@@ -1320,12 +1254,11 @@ discordClient.on('messageCreate', async (msg) => {
                     );
                     await msg.reply({ embeds: [statusEmbed] });
                     break;
-                    
                 case 'queue':
                     if (state.kitQueue.length === 0) {
                         await msg.reply('📝 Kit queue is empty');
                     } else {
-                        const queueList = state.kitQueue.map((user, index) => `${index + 1}. ${user}`).join('\n');
+                        const queueList = state.kitQueue.map(([user, type], index) => `${index + 1}. ${user} (${type})`).join('\n');
                         const queueEmbed = createEmbed('📋 Kit Queue', 
                             `**${state.kitQueue.length} players in queue:**\n\`\`\`${queueList}\`\`\``,
                             CONFIG.discord.embedColor.info
@@ -1333,13 +1266,11 @@ discordClient.on('messageCreate', async (msg) => {
                         await msg.reply({ embeds: [queueEmbed] });
                     }
                     break;
-                    
                 case 'clearqueue':
                     const queueSize = state.kitQueue.length;
                     state.kitQueue = [];
                     await msg.reply(`✅ Cleared ${queueSize} players from queue`);
                     break;
-                    
                 case 'vip':
                     if (args.length === 0) {
                         const vipList = Array.from(state.vipUsers).join(', ') || 'None';
@@ -1347,12 +1278,10 @@ discordClient.on('messageCreate', async (msg) => {
                     } else {
                         const action = args[0].toLowerCase();
                         const username = args[1];
-                        
                         if (!username && action !== 'list') {
                             await msg.reply('❌ Usage: `$vip <add/remove/list> [username]`');
                             break;
                         }
-                        
                         switch (action) {
                             case 'add':
                                 state.addVipUser(username);
@@ -1371,7 +1300,6 @@ discordClient.on('messageCreate', async (msg) => {
                         }
                     }
                     break;
-                    
                 case 'blacklist':
                     if (args.length === 0) {
                         const blacklist = Array.from(blacklistedUsers).join(', ') || 'None';
@@ -1379,12 +1307,10 @@ discordClient.on('messageCreate', async (msg) => {
                     } else {
                         const action = args[0].toLowerCase();
                         const username = args[1];
-                        
                         if (!username && action !== 'list') {
                             await msg.reply('❌ Usage: `$blacklist <add/remove/list> [username]`');
                             break;
                         }
-                        
                         switch (action) {
                             case 'add':
                                 blacklistedUsers.add(username.toLowerCase());
@@ -1403,7 +1329,6 @@ discordClient.on('messageCreate', async (msg) => {
                         }
                     }
                     break;
-                    
                 case 'cooldown':
                     if (args.length === 0) {
                         if (state.cooldowns.size === 0) {
@@ -1417,7 +1342,6 @@ discordClient.on('messageCreate', async (msg) => {
                                 })
                                 .filter(entry => !entry.includes('0s'))
                                 .join('\n');
-                            
                             if (cooldownList) {
                                 await msg.reply(`⏰ Active Cooldowns:\n\`\`\`${cooldownList}\`\`\``);
                             } else {
@@ -1430,7 +1354,6 @@ discordClient.on('messageCreate', async (msg) => {
                         await msg.reply(`✅ Cleared cooldown for ${username}`);
                     }
                     break;
-                    
                 case 'say':
                     if (args.length === 0) {
                         await msg.reply('❌ Usage: `$say <message>`');
@@ -1443,7 +1366,6 @@ discordClient.on('messageCreate', async (msg) => {
                         }
                     }
                     break;
-                    
                 case 'whisper':
                 case 'msg':
                     if (args.length < 2) {
@@ -1458,14 +1380,12 @@ discordClient.on('messageCreate', async (msg) => {
                         }
                     }
                     break;
-                    
                 case 'inventory':
                 case 'inv':
                     if (!mcBot || !mcBot.inventory) {
                         await msg.reply('❌ Bot inventory not available');
                         break;
                     }
-                    
                     const items = mcBot.inventory.items();
                     if (items.length === 0) {
                         await msg.reply('📦 Inventory is empty');
@@ -1475,11 +1395,9 @@ discordClient.on('messageCreate', async (msg) => {
                             const name = item.displayName || item.name;
                             itemCounts[name] = (itemCounts[name] || 0) + item.count;
                         });
-                        
                         const itemList = Object.entries(itemCounts)
                             .map(([name, count]) => `${name}: ${count}`)
                             .join('\n');
-                        
                         const invEmbed = createEmbed('📦 Bot Inventory', 
                             `**${items.length} items total:**\n\`\`\`${itemList}\`\`\``,
                             CONFIG.discord.embedColor.info
@@ -1487,7 +1405,6 @@ discordClient.on('messageCreate', async (msg) => {
                         await msg.reply({ embeds: [invEmbed] });
                     }
                     break;
-                    
                 case 'config':
                     const configEmbed = createEmbed('⚙️ Bot Configuration', 
                         `**Minecraft:**\n` +
@@ -1498,7 +1415,8 @@ discordClient.on('messageCreate', async (msg) => {
                         `• Normal Cooldown: ${CONFIG.kit.cooldownTime / 1000}s\n` +
                         `• VIP Cooldown: ${CONFIG.kit.vipCooldownTime / 1000}s\n` +
                         `• Max Queue: ${CONFIG.kit.maxQueueSize}\n` +
-                        `• TPA Timeout: ${CONFIG.kit.teleportTimeout / 1000}s\n\n` +
+                        `• TPA Timeout: ${CONFIG.kit.teleportTimeout / 1000}s\n` +
+                        `• Available Kits: default, pvp, greif, regear\n\n` +
                         `**Spammer:**\n` +
                         `• Interval: ${CONFIG.spammer.interval / 1000}s\n` +
                         `• Random Delay: ${CONFIG.spammer.randomDelay / 1000}s\n\n` +
@@ -1506,7 +1424,6 @@ discordClient.on('messageCreate', async (msg) => {
                     );
                     await msg.reply({ embeds: [configEmbed] });
                     break;
-                    
                 case 'help':
                     const helpFields = [
                         { name: '🎮 Basic Commands', value: '`$drop` - Drop all items\n`$tp` - Request teleport\n`$tph` - Request teleport here\n`$say <message>` - Send chat message\n`$msg <player> <message>` - Send whisper', inline: false },
@@ -1516,7 +1433,6 @@ discordClient.on('messageCreate', async (msg) => {
                         { name: '📋 Information', value: '`$inventory` - Show bot inventory\n`$help` - Show this help', inline: false },
                         { name: '🎉 Giveaway System', value: '`$giveaway create "Title" "Prize" <minutes>` - Create giveaway\n`$giveaway end` - End current giveaway\n`$giveaway cancel` - Cancel giveaway\n`$giveaway participants` - Show participants\n`$giveaway` - Show giveaway status', inline: false }
                     ];
-                    
                     const helpEmbed = createEmbed('🔧 Enhanced Bot Commands',
                         'Available commands for bot management',
                         CONFIG.discord.embedColor.info,
@@ -1524,7 +1440,6 @@ discordClient.on('messageCreate', async (msg) => {
                     );
                     await msg.reply({ embeds: [helpEmbed] });
                     break;
-
                 case 'giveaway':
                     if (args.length === 0) {
                         if (giveawayManager.hasActiveGiveaway()) {
@@ -1549,40 +1464,32 @@ discordClient.on('messageCreate', async (msg) => {
                         }
                     } else {
                         const subCommand = args[0].toLowerCase();
-
                         switch (subCommand) {
                             case 'create':
                                 if (args.length < 4) {
                                     await msg.reply('❌ Usage: `$giveaway create "Title" "Prize" <minutes>`\nExample: `$giveaway create "Diamond Giveaway" "64 Diamonds" 10`');
                                     break;
                                 }
-
                                 const fullArgs = content.slice(content.indexOf('create') + 6).trim();
                                 const matches = fullArgs.match(/"([^"]+)"\s+"([^"]+)"\s+(\d+)/);
-
                                 if (!matches) {
                                     await msg.reply('❌ Invalid format. Use: `$giveaway create "Title" "Prize" <minutes>`');
                                     break;
                                 }
-
                                 const title = matches[1];
                                 const prize = matches[2];
                                 const duration = parseInt(matches[3]);
-
                                 if (duration < 1 || duration > 1440) {
                                     await msg.reply('❌ Duration must be between 1 and 1440 minutes (24 hours)');
                                     break;
                                 }
-
                                 const result = giveawayManager.createGiveaway(title, prize, duration, msg.author.username);
-
                                 if (result.success) {
                                     await msg.reply(`✅ Giveaway created successfully!\n**Title:** ${title}\n**Prize:** ${prize}\n**Duration:** ${duration} minutes`);
                                 } else {
                                     await msg.reply(`❌ ${result.message}`);
                                 }
                                 break;
-
                             case 'end':
                                 const endResult = giveawayManager.endGiveaway(false);
                                 if (endResult.success) {
@@ -1596,7 +1503,6 @@ discordClient.on('messageCreate', async (msg) => {
                                     await msg.reply(`❌ ${endResult.message}`);
                                 }
                                 break;
-
                             case 'cancel':
                                 const cancelResult = giveawayManager.cancelGiveaway();
                                 if (cancelResult.success) {
@@ -1605,7 +1511,6 @@ discordClient.on('messageCreate', async (msg) => {
                                     await msg.reply(`❌ ${cancelResult.message}`);
                                 }
                                 break;
-
                             case 'participants':
                                 if (giveawayManager.hasActiveGiveaway()) {
                                     const info = giveawayManager.getGiveawayInfo();
@@ -1627,14 +1532,12 @@ discordClient.on('messageCreate', async (msg) => {
                                     await msg.reply('❌ No active giveaway');
                                 }
                                 break;
-
                             default:
                                 await msg.reply('❌ Unknown giveaway command. Use: `create`, `end`, `cancel`, or `participants`');
                                 break;
                         }
                     }
                     break;
-                    
                 default:
                     await msg.reply('❌ Unknown command. Use `$help` for available commands.');
                     break;
@@ -1644,11 +1547,8 @@ discordClient.on('messageCreate', async (msg) => {
             await msg.reply('❌ An error occurred while executing the command.');
         }
     } else if (content && state.isConnected && state.isLoggedIn) {
-        if (await safeChat(content)) {
-            await msg.react('✅');
-        } else {
-            await msg.react('❌');
-        }
+        if (await safeChat(content)) await msg.react('✅');
+        else await msg.react('❌');
     }
 });
 
@@ -1675,7 +1575,7 @@ process.on('SIGTERM', () => {
 });
 
 state.on('kitDelivered', (data) => {
-    logger.info(`Kit delivered to ${data.username} at ${data.position.x}, ${data.position.y}, ${data.position.z}`);
+    logger.info(`Kit delivered to ${data.username} at ${data.position.x}, ${data.position.y}, ${data.position.z} (Kit: ${data.kitType})`);
 });
 
 state.on('vipAdded', (username) => {
@@ -1696,14 +1596,12 @@ function validateConfig() {
         'DISCORD_CHANNEL_ID',
         'COORDS_CHANNEL_ID'
     ];
-    
     for (const env of required) {
         if (!process.env[env]) {
             logger.error(`Missing required environment variable: ${env}`);
             process.exit(1);
         }
     }
-    
     logger.info('Configuration validated successfully');
 }
 
@@ -1711,28 +1609,19 @@ async function startup() {
     try {
         logger.info('Starting Enhanced Minecraft Bot...');
         validateConfig();
-        
         await discordClient.login(process.env.DISCORD_TOKEN);
-        
         await new Promise(resolve => {
-            if (discordClient.isReady()) {
-                resolve();
-            } else {
-                discordClient.once('ready', resolve);
-            }
+            if (discordClient.isReady()) resolve();
+            else discordClient.once('ready', resolve);
         });
-        
         logger.info('Discord client ready, initializing Minecraft bot...');
         initBot();
-        
     } catch (error) {
         logger.error(`Startup failed: ${error.message}`);
         process.exit(1);
     }
 }
-// ... (all your existing code up to the end)
 
-// HTTP server for Render Web Service health check
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot is running');
