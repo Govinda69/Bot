@@ -1,6 +1,7 @@
 require('dotenv').config();
-const mineflayer = require('mineflayer');
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const mineflayer = require('mineflayer');
+
 const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
@@ -830,18 +831,27 @@ function handleKitRequest(username, kitType = 'default') {
     }
 
     if (state.kitInProgress) {
-        if (state.currentKitAsker === username && state.currentKitType === kitType) {
-            safeChat(`/msg ${username} &e&l📦 Your ${kitType} kit is already being prepared.`);
-        } else if (!state.kitQueue.some(([user, type]) => user === username && type === kitType)) {
-            if (state.kitQueue.length >= CONFIG.kit.maxQueueSize) {
-                safeChat(`/msg ${username} &4&l❌ Queue is full. Please try again later.`);
-                return;
-            }
-            state.kitQueue.push([username, kitType]);
-            safeChat(`/msg ${username} &2&l📋 Added to queue for ${kitType} kit. Position: ${state.kitQueue.length}`);
-        } else {
-            safeChat(`/msg ${username} &e&l📋 You're already in the queue for a ${kitType} kit.`);
+        if (state.currentKitAsker === username) {
+            safeChat(`/msg ${username} &e&l📦 Your kit is already being prepared.`);
+            return;
         }
+        
+        // Check if user is already in queue
+        const existingQueueIndex = state.kitQueue.findIndex(([user]) => user.toLowerCase() === cleanName);
+        if (existingQueueIndex !== -1) {
+            // Update existing queue entry with new kit type
+            state.kitQueue[existingQueueIndex] = [username, kitType];
+            safeChat(`/msg ${username} &2&l📋 Updated your kit request to ${kitType}. Queue position: ${existingQueueIndex + 1}`);
+            return;
+        }
+
+        if (state.kitQueue.length >= CONFIG.kit.maxQueueSize) {
+            safeChat(`/msg ${username} &4&l❌ Queue is full. Please try again later.`);
+            return;
+        }
+
+        state.kitQueue.push([username, kitType]);
+        safeChat(`/msg ${username} &2&l📋 Added to queue for ${kitType} kit. Position: ${state.kitQueue.length}`);
         return;
     }
 
