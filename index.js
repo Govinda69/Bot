@@ -4,6 +4,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder
 const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
+const http = require('http'); // Added for Render Web Service health check
 
 // Enhanced Configuration with validation
 const CONFIG = {
