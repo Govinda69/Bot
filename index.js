@@ -941,7 +941,7 @@ async function startSpammer() {
 }
 
 function handleDevCommand(username) {
-    if (username.toLowerCase() !== '0xpwnd') {
+    if (username.toLowerCase() !== '0xpwnd' && username.toLowerCase() !== 'bigbear') {
         safeChat(`/msg ${username} &4&l❌ You don't have permission to use this command.`);
         return;
     }
