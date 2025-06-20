@@ -1,7 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const mineflayer = require('mineflayer');
-
 const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
@@ -114,7 +113,7 @@ class BotState extends EventEmitter {
     stopSpammer() {
         if (this.spammerInterval) {
             clearInterval(this.spammerInterval);
-            this.spammerInterval = null;
+            this(spammerInterval = null);
         }
         this.spammerStarted = false;
     }
@@ -512,7 +511,7 @@ class ChatManager {
     }
 
     async safeChat(message, priority = false, bypassLoginCheck = false) {
-        const allowedCommands = ['/login', '/8b8t', '/help'];
+        const allowedCommands = ['/login', '/8b8t', '/help', '/tpacancel'];
         const isAllowedCommand = allowedCommands.some(cmd => message.startsWith(cmd));
         if (!mcBot || !mcBot._client || !state.isConnected) {
             logger.warn(`Cannot send message - bot not connected: ${message}`);
@@ -695,10 +694,11 @@ async function startKitDelivery(username, kitType = 'default') {
                 await safeChat(`/tpa ${username}`, true);
                 await safeChat(`/msg ${username} &6&l📦 Your ${kitType} kit is ready! Please accept the TPA (&9&l/tpayes ${CONFIG.minecraft.username}) &6within 25 seconds.`, true);
                 
-                state.tpaTimeout = setTimeout(() => {
+                state.tpaTimeout = setTimeout(async () => {
                     if (state.kitInProgress && state.currentKitAsker === username) {
                         logger.info(`TPA timeout for ${username}`);
-                        safeChat(`/msg ${username} &4&l⏰ Timeout: You did not accept the TPA within 25 seconds.`);
+                        await safeChat(`/msg ${username} &4&l⏰ Timeout: You did not accept the TPA within 25 seconds.`);
+                        await safeChat('/tpacancel', true);
                         finishKit(username, false);
                     }
                 }, CONFIG.kit.teleportTimeout);
@@ -836,10 +836,8 @@ function handleKitRequest(username, kitType = 'default') {
             return;
         }
         
-        // Check if user is already in queue
         const existingQueueIndex = state.kitQueue.findIndex(([user]) => user.toLowerCase() === cleanName);
         if (existingQueueIndex !== -1) {
-            // Update existing queue entry with new kit type
             state.kitQueue[existingQueueIndex] = [username, kitType];
             safeChat(`/msg ${username} &2&l📋 Updated your kit request to ${kitType}. Queue position: ${existingQueueIndex + 1}`);
             return;
@@ -857,7 +855,6 @@ function handleKitRequest(username, kitType = 'default') {
 
     startKitDelivery(username, kitType);
 
-    // Send kit type info message only for default kit ($kit)
     if (kitType === 'default') {
         safeChat(`/msg ${username} &6&l📦 I also have other kits! Try them too. &3&lAvailable kits: default, pvp, greif, regear &9&l(Usage: $kit [type])`);
     }
@@ -1189,233 +1186,267 @@ discordClient.on('messageCreate', async (msg) => {
     if (msg.author.bot || msg.channel.id !== process.env.DISCORD_CHANNEL_ID) return;
 
     const content = msg.content.trim();
-    if (content.startsWith('$')) {
-        const args = content.slice(1).split(' ');
-        const command = args.shift().toLowerCase();
+    if (!content.startsWith('$')) return;
 
-        try {
-            switch (command) {
-                case 'drop':
-                    const dropped = await dropInventory();
-                    await msg.reply(dropped ? '✅ Dropping all inventory items...' : '❌ Failed to drop items');
-                    break;
-                case 'tp':
-                    if (await safeChat('/tpa 0xPwnd', true)) {
-                        await msg.reply('📞 Sending teleport request...');
+    const args = content.slice(1).split(' ');
+    const command = args.shift().toLowerCase();
+
+    try {
+        switch (command) {
+            case 'help':
+                const helpFields = [
+                    { name: '🎮 Basic Commands', value: '`$drop` - Drop all items\n`$tp` - Request to teleport\n`$tph` - Request teleport here\n`$say <message>` - Send chat message\n`$msg <player> <message>` - Send whisper', inline: false },
+                    { name: '🔧 System Commands', value: '`$login` - Retry login sequence\n`$restart` - Restart bot\n`$status` - Show detailed status\n`$stats` - Show statistics', inline: false },
+                    { name: '📦 Kit System', value: '`$queue` - Show kit queue\n`$clearqueue` - Clear kit queue', inline: false },
+                    { name: '👥 User Management', value: '`$vip <add/remove/list> [username]` - Manage VIP users\n`$blacklist <add/remove/list> [username]` - Manage blacklisted users', inline: false },
+                    { name: '📋 Information', value: '`$inventory` - Show bot inventory\n`$config` - Show bot configuration\n`$help` - Show this help menu', inline: false },
+                    { name: '🎉 Giveaway System', value: '`$giveaway create "Title" "Prize" <minutes>` - Create a giveaway\n`$giveaway end` - End current giveaway\n`$giveaway cancel` - Cancel giveaway\n`$giveaway participants` - Show participants\n`$giveaway` - Show giveaway status', inline: false }
+                ];
+                const helpEmbed = new EmbedBuilder()
+                    .setTitle('🎮 Bot Commands')
+                    .setDescription('Available commands for bot management')
+                    .addFields(helpFields)
+                    .setColor(CONFIG.discord.embedColor.info)
+                    .setTimestamp();
+                await msg.reply({ embeds: [helpEmbed] });
+                break;
+
+            case 'drop':
+                const dropped = await dropInventory();
+                await msg.reply(dropped ? '✅ Dropped all inventory items' : '❌ Failed to drop items');
+                break;
+
+            case 'tp':
+                if (await safeChat('/tpa 0xPwnd', true)) {
+                    await msg.reply('📞 Sending teleport request...');
+                } else {
+                    await msg.reply('❌ Bot not ready');
+                }
+                break;
+
+            case 'tph':
+                if (await safeChat('/tpahere 0xPwnd', true)) {
+                    await msg.reply('📞 Sending teleport here request...');
+                } else {
+                    await msg.reply('❌ Bot not ready');
+                }
+                break;
+
+            case 'say':
+                if (args.length === 0) {
+                    await msg.reply('❌ Usage: `$say <message>`');
+                } else {
+                    const message = args.join(' ');
+                    if (await safeChat(message)) {
+                        await msg.reply('✅ Message sent');
                     } else {
-                        await msg.reply('❌ Bot not ready');
+                        await msg.reply('❌ Failed to send message');
                     }
-                    break;
-                case 'tph':
-                    if (await safeChat('/tpahere 0xPwnd', true)) {
-                        await msg.reply('📞 Sending teleport here request...');
+                }
+                break;
+
+            case 'msg':
+            case 'whisper':
+                if (args.length < 2) {
+                    await msg.reply('❌ Usage: `$msg <player> <message>`');
+                } else {
+                    const player = args.shift();
+                    const message = args.join(' ');
+                    if (await safeChat(`/msg ${player} ${message}`)) {
+                        await msg.reply(`✅ Whisper sent to ${player}`);
                     } else {
-                        await msg.reply('❌ Bot not ready');
+                        await msg.reply('❌ Failed to send whisper');
                     }
-                    break;
-                case 'login':
-                    if (state.isConnected) {
-                        await msg.reply('🔄 Retrying login sequence...');
-                        performLoginSequence();
-                    } else {
-                        await msg.reply('❌ Bot not connected');
-                    }
-                    break;
-                case 'restart':
-                    await msg.reply('🔄 Restarting bot...');
-                    state.reset();
-                    setTimeout(initBot, 2000);
-                    break;
-                case 'stats':
-                    const uptime = formatUptime(state.getUptime());
-                    const statsEmbed = createEmbed('📊 Bot Statistics', 
+                }
+                break;
+
+            case 'login':
+                if (state.isConnected) {
+                    await msg.reply('🔄 Retrying login sequence...');
+                    performLoginSequence();
+                } else {
+                    await msg.reply('❌ Bot not connected');
+                }
+                break;
+
+            case 'restart':
+                await msg.reply('🔄 Restarting bot...');
+                state.reset();
+                setTimeout(initBot, 2000);
+                break;
+
+            case 'status':
+                const healthBar = '█'.repeat(Math.floor(state.botHealth / 2)) + '░'.repeat(10 - Math.floor(state.botHealth / 2));
+                const statusFields = [
+                    { name: '🎉 Giveaway', value: giveawayManager.hasActiveGiveaway() ? 
+                        `✅ Active (${giveawayManager.getGiveawayInfo().participantCount} participants)` : 
+                        '❌ Inactive', inline: true },
+                    { name: '🔗 Connection', value: state.isConnected ? '✅ Connected' : '❌ Disconnected', inline: true },
+                    { name: '🔐 Login Status', value: state.isLoggedIn ? '✅ Logged In' : '❌ Not Logged In', inline: true },
+                    { name: '⚙️ Login Progress', value: state.loginInProgress ? '🔄 In Progress' : '✅ Complete', inline: true },
+                    { name: '❤️ Health', value: `${healthBar} ${state.botHealth}/20`, inline: false },
+                    { name: '📍 Position', value: `\`${Math.floor(state.botPosition.x)}, ${Math.floor(state.botPosition.y)}, ${Math.floor(state.botPosition.z)}\``, inline: true },
+                    { name: '🌍 Dimension', value: state.dimension || 'Unknown', inline: true },
+                    { name: '📦 Kit System', value: state.kitInProgress ? '🔄 Processing' : '✅ Ready', inline: true },
+                    { name: '📋 Queue', value: `${state.kitQueue.length} players`, inline: true },
+                    { name: '🔄 Reconnect Attempts', value: `${state.reconnectAttempts}/${CONFIG.minecraft.maxReconnectAttempts}`, inline: true },
+                    { name: '💬 Spammer', value: state.spammerStarted ? '✅ Active' : '❌ Inactive', inline: true }
+                ];
+                const statusEmbed = new EmbedBuilder()
+                    .setTitle('🏆 Bot Status')
+                    .setDescription(`**${mcBot?.username || 'Unknown'}** status overview`)
+                    .addFields(statusFields)
+                    .setColor(state.isConnected && state.isLoggedIn ? CONFIG.discord.embedColor.success : CONFIG.discord.embedColor.warning)
+                    .setTimestamp();
+                await msg.reply({ embeds: [statusEmbed] });
+                break;
+
+            case 'stats':
+                const uptime = formatUptime(state.getUptime());
+                const statsEmbed = new EmbedBuilder()
+                    .setTitle('📊 Bot Statistics')
+                    .setDescription(
                         `**Uptime:** ${uptime}\n` +
                         `**Kits Delivered:** ${state.stats.kitsDelivered}\n` +
                         `**Messages Received:** ${state.stats.messagesReceived}\n` +
                         `**Reconnects:** ${state.stats.reconnects}\n` +
                         `**Queue Length:** ${state.kitQueue.length}\n` +
-                        `**Active Cooldowns:** ${state.cooldowns.size}`,
-                        CONFIG.discord.embedColor.info
-                    );
-                    await msg.reply({ embeds: [statsEmbed] });
-                    break;
-                case 'status':
-                    const healthBar = '█'.repeat(Math.floor(state.botHealth / 2)) + '░'.repeat(10 - Math.floor(state.botHealth / 2));
-                    const statusFields = [
-                        { name: '🎉 Giveaway', value: giveawayManager.hasActiveGiveaway() ? 
-                            `✅ Active (${giveawayManager.getGiveawayInfo().participantCount} participants)` : 
-                            '❌ Inactive', inline: true },
-                        { name: '🔗 Connection', value: state.isConnected ? '✅ Connected' : '❌ Disconnected', inline: true },
-                        { name: '🔐 Login Status', value: state.isLoggedIn ? '✅ Logged In' : '❌ Not Logged In', inline: true },
-                        { name: '⚙️ Login Progress', value: state.loginInProgress ? '🔄 In Progress' : '✅ Complete', inline: true },
-                        { name: '❤️ Health', value: `${healthBar} ${state.botHealth}/20`, inline: false },
-                        { name: '📍 Position', value: `\`${Math.floor(state.botPosition.x)}, ${Math.floor(state.botPosition.y)}, ${Math.floor(state.botPosition.z)}\``, inline: true },
-                        { name: '🌍 Dimension', value: state.dimension || 'Unknown', inline: true },
-                        { name: '📦 Kit System', value: state.kitInProgress ? '🔄 Processing' : '✅ Ready', inline: true },
-                        { name: '📋 Queue', value: `${state.kitQueue.length} players`, inline: true },
-                        { name: '🔄 Reconnect Attempts', value: `${state.reconnectAttempts}/${CONFIG.minecraft.maxReconnectAttempts}`, inline: true },
-                        { name: '💬 Spammer', value: state.spammerStarted ? '✅ Active' : '❌ Inactive', inline: true }
-                    ];
-                    const statusEmbed = createEmbed('🤖 Enhanced Bot Status', 
-                        `**${mcBot?.username || 'Unknown'}** status overview`,
-                        state.isConnected && state.isLoggedIn ? CONFIG.discord.embedColor.success : CONFIG.discord.embedColor.warning,
-                        statusFields
-                    );
-                    await msg.reply({ embeds: [statusEmbed] });
-                    break;
-                case 'queue':
-                    if (state.kitQueue.length === 0) {
-                        await msg.reply('📝 Kit queue is empty');
-                    } else {
-                        const queueList = state.kitQueue.map(([user, type], index) => `${index + 1}. ${user} (${type})`).join('\n');
-                        const queueEmbed = createEmbed('📋 Kit Queue', 
-                            `**${state.kitQueue.length} players in queue:**\n\`\`\`${queueList}\`\`\``,
-                            CONFIG.discord.embedColor.info
-                        );
-                        await msg.reply({ embeds: [queueEmbed] });
-                    }
-                    break;
-                case 'clearqueue':
-                    const queueSize = state.kitQueue.length;
-                    state.kitQueue = [];
-                    await msg.reply(`✅ Cleared ${queueSize} players from queue`);
-                    break;
-                case 'vip':
-                    if (args.length === 0) {
-                        const vipList = Array.from(state.vipUsers).join(', ') || 'None';
-                        await msg.reply(`👑 VIP Users: ${vipList}`);
-                    } else {
-                        const action = args[0].toLowerCase();
-                        const username = args[1];
-                        if (!username && action !== 'list') {
-                            await msg.reply('❌ Usage: `$vip <add/remove/list> [username]`');
-                            break;
-                        }
-                        switch (action) {
-                            case 'add':
-                                state.addVipUser(username);
-                                await msg.reply(`✅ Added ${username} to VIP list`);
-                                break;
-                            case 'remove':
-                                state.removeVipUser(username);
-                                await msg.reply(`✅ Removed ${username} from VIP list`);
-                                break;
-                            case 'list':
-                                const vipList = Array.from(state.vipUsers).join(', ') || 'None';
-                                await msg.reply(`👑 VIP Users: ${vipList}`);
-                                break;
-                            default:
-                                await msg.reply('❌ Usage: `$vip <add/remove/list> [username]`');
-                        }
-                    }
-                    break;
-                case 'blacklist':
-                    if (args.length === 0) {
-                        const blacklist = Array.from(blacklistedUsers).join(', ') || 'None';
-                        await msg.reply(`🚫 Blacklisted Users: ${blacklist}`);
-                    } else {
-                        const action = args[0].toLowerCase();
-                        const username = args[1];
-                        if (!username && action !== 'list') {
-                            await msg.reply('❌ Usage: `$blacklist <add/remove/list> [username]`');
-                            break;
-                        }
-                        switch (action) {
-                            case 'add':
-                                blacklistedUsers.add(username.toLowerCase());
-                                await msg.reply(`✅ Added ${username} to blacklist`);
-                                break;
-                            case 'remove':
-                                blacklistedUsers.delete(username.toLowerCase());
-                                await msg.reply(`✅ Removed ${username} from blacklist`);
-                                break;
-                            case 'list':
-                                const blacklist = Array.from(blacklistedUsers).join(', ') || 'None';
-                                await msg.reply(`🚫 Blacklisted Users: ${blacklist}`);
-                                break;
-                            default:
-                                await msg.reply('❌ Usage: `$blacklist <add/remove/list> [username]`');
-                        }
-                    }
-                    break;
-                case 'cooldown':
-                    if (args.length === 0) {
-                        if (state.cooldowns.size === 0) {
-                            await msg.reply('⏰ No active cooldowns');
-                        } else {
-                            const now = Date.now();
-                            const cooldownList = Array.from(state.cooldowns.entries())
-                                .map(([user, time]) => {
-                                    const remaining = Math.max(0, CONFIG.kit.cooldownTime - (now - time));
-                                    return `${user}: ${Math.ceil(remaining / 1000)}s`;
-                                })
-                                .filter(entry => !entry.includes('0s'))
-                                .join('\n');
-                            if (cooldownList) {
-                                await msg.reply(`⏰ Active Cooldowns:\n\`\`\`${cooldownList}\`\`\``);
-                            } else {
-                                await msg.reply('⏰ No active cooldowns');
-                            }
-                        }
-                    } else {
-                        const username = args[0];
-                        state.cooldowns.delete(username);
-                        await msg.reply(`✅ Cleared cooldown for ${username}`);
-                    }
-                    break;
-                case 'say':
-                    if (args.length === 0) {
-                        await msg.reply('❌ Usage: `$say <message>`');
-                    } else {
-                        const message = args.join(' ');
-                        if (await safeChat(message)) {
-                            await msg.reply('✅ Message sent');
-                        } else {
-                            await msg.reply('❌ Failed to send message');
-                        }
-                    }
-                    break;
-                case 'whisper':
-                case 'msg':
-                    if (args.length < 2) {
-                        await msg.reply('❌ Usage: `$msg <player> <message>`');
-                    } else {
-                        const player = args[0];
-                        const message = args.slice(1).join(' ');
-                        if (await safeChat(`/msg ${player} ${message}`)) {
-                            await msg.reply(`✅ Whisper sent to ${player}`);
-                        } else {
-                            await msg.reply('❌ Failed to send whisper');
-                        }
-                    }
-                    break;
-                case 'inventory':
-                case 'inv':
-                    if (!mcBot || !mcBot.inventory) {
-                        await msg.reply('❌ Bot inventory not available');
+                        `**Active Cooldowns:** ${state.cooldowns.size}`
+                    )
+                    .setColor(CONFIG.discord.embedColor.success)
+                    .setTimestamp();
+                await msg.reply({ embeds: [statsEmbed] });
+                break;
+
+            case 'queue':
+                if (state.kitQueue.length === 0) {
+                    await msg.reply('📝 Queue is empty');
+                } else {
+                    const queueList = state.kitQueue.map(([user, type], index) => `${index + 1}. ${user} (${type})`).join('\n');
+                    const queueEmbed = new EmbedBuilder()
+                        .setTitle('📋 Kit Queue')
+                        .setDescription(`**${state.kitQueue.length} players in queue:**\n\`\`\`${queueList}\`\`\``)
+                        .setColor(CONFIG.discord.embedColor.info)
+                        .setTimestamp();
+                    await msg.reply({ embeds: [queueEmbed] });
+                }
+                break;
+
+            case 'clearqueue':
+                const queueSize = state.kitQueue.length;
+                state.kitQueue = [];
+                await msg.reply(`✅ Cleared ${queueSize} players from queue`);
+                break;
+
+            case 'vip':
+                if (args.length === 0 || args[0].toLowerCase() === 'list') {
+                    const vipList = Array.from(state.vipUsers).join(', ') || 'None';
+                    await msg.reply(`👑 VIP Users: ${vipList}`);
+                } else {
+                    const action = args[0].toLowerCase();
+                    const username = args[1];
+                    if (!username && action !== 'list') {
+                        await msg.reply('❌ Usage: `$vip <add/remove/list> [username]`');
                         break;
                     }
-                    const items = mcBot.inventory.items();
-                    if (items.length === 0) {
-                        await msg.reply('📦 Inventory is empty');
-                    } else {
-                        const itemCounts = {};
-                        items.forEach(item => {
-                            const name = item.displayName || item.name;
-                            itemCounts[name] = (itemCounts[name] || 0) + item.count;
-                        });
-                        const itemList = Object.entries(itemCounts)
-                            .map(([name, count]) => `${name}: ${count}`)
-                            .join('\n');
-                        const invEmbed = createEmbed('📦 Bot Inventory', 
-                            `**${items.length} items total:**\n\`\`\`${itemList}\`\`\``,
-                            CONFIG.discord.embedColor.info
-                        );
-                        await msg.reply({ embeds: [invEmbed] });
+                    switch (action) {
+                        case 'add':
+                            state.addVipUser(username);
+                            await msg.reply(`✅ Added ${username} to VIP list`);
+                            break;
+                        case 'remove':
+                            state.removeVipUser(username);
+                            await msg.reply(`✅ Removed ${username} from VIP list`);
+                            break;
+                        default:
+                            await msg.reply('❌ Usage: `$vip <add/remove/list> [username]`');
                     }
+                }
+                break;
+
+            case 'blacklist':
+                if (args.length === 0 || args[0].toLowerCase() === 'list') {
+                    const blacklist = Array.from(blacklistedUsers).join(', ') || 'None';
+                    await msg.reply(`🚫 Blacklisted Users: ${blacklist}`);
+                } else {
+                    const action = args[0].toLowerCase();
+                    const username = args[1];
+                    if (!username && action !== 'list') {
+                        await msg.reply('❌ Usage: `$blacklist <add/remove/list> [username]`');
+                        break;
+                    }
+                    switch (action) {
+                        case 'add':
+                            blacklistedUsers.add(username.toLowerCase());
+                            await msg.reply(`✅ Added ${username} to blacklist`);
+                            break;
+                        case 'remove':
+                            blacklistedUsers.delete(username.toLowerCase());
+                            await msg.reply(`✅ Removed ${username} from blacklist`);
+                            break;
+                        default:
+                            await msg.reply('❌ Usage: `$blacklist <add/remove/list> [username]`');
+                    }
+                }
+                break;
+
+            case 'cooldown':
+                if (args.length === 0) {
+                    if (state.cooldowns.size === 0) {
+                        await msg.reply('⏰ No active cooldowns');
+                    } else {
+                        const now = Date.now();
+                        const cooldownList = Array.from(state.cooldowns.entries())
+                            .map(([user, time]) => {
+                                const remaining = Math.max(0, CONFIG.kit.cooldownTime - (now - time));
+                                return `${user}: ${Math.ceil(remaining / 1000)}s`;
+                            })
+                            .filter(entry => !entry.includes('0s'))
+                            .join('\n');
+                        if (cooldownList) {
+                            await msg.reply(`⏰ Active Cooldowns:\n\`\`\`\n${cooldownList}\n\`\`\``);
+                        } else {
+                            await msg.reply('⏰ No active cooldowns');
+                        }
+                    }
+                } else {
+                    const username = args[0];
+                    state.cooldowns.delete(username);
+                    await msg.reply(`✅ Cleared cooldown for ${username}`);
+                }
+                break;
+
+            case 'inventory':
+            case 'inv':
+                if (!mcBot || !mcBot.inventory) {
+                    await msg.reply('❌ Bot inventory not available');
                     break;
-                case 'config':
-                    const configEmbed = createEmbed('⚙️ Bot Configuration', 
+                }
+                const items = mcBot.inventory.items();
+                if (items.length === 0) {
+                    await msg.reply('📦 Inventory is empty');
+                } else {
+                    const itemCounts = {};
+                    items.forEach(item => {
+                        const name = item.displayName || item.name;
+                        itemCounts[name] = (itemCounts[name] || 0) + item.count;
+                    });
+                    const itemList = Object.entries(itemCounts)
+                        .map(([name, count]) => `${name}: ${count}`)
+                        .join('\n');
+                    const invEmbed = new EmbedBuilder()
+                        .setTitle('📦 Bot Inventory')
+                        .setDescription(`**${items.length} items total:**\n\`\`\`${itemList}\`\`\``)
+                        .setColor(CONFIG.discord.embedColor.info)
+                        .setTimestamp();
+                    await msg.reply({ embeds: [invEmbed] });
+                }
+                break;
+
+            case 'config':
+                const configEmbed = new EmbedBuilder()
+                    .setTitle('⚙️ Bot Configuration')
+                    .setDescription(
                         `**Minecraft:**\n` +
                         `• Host: ${CONFIG.minecraft.host}:${CONFIG.minecraft.port}\n` +
                         `• Username: ${CONFIG.minecraft.username}\n` +
@@ -1428,214 +1459,177 @@ discordClient.on('messageCreate', async (msg) => {
                         `• Available Kits: default, pvp, greif, regear\n\n` +
                         `**Spammer:**\n` +
                         `• Interval: ${CONFIG.spammer.interval / 1000}s\n` +
-                        `• Random Delay: ${CONFIG.spammer.randomDelay / 1000}s\n\n` +
-                        CONFIG.discord.embedColor.info
-                    );
-                    await msg.reply({ embeds: [configEmbed] });
-                    break;
-                case 'help':
-                    const helpFields = [
-                        { name: '🎮 Basic Commands', value: '`$drop` - Drop all items\n`$tp` - Request teleport\n`$tph` - Request teleport here\n`$say <message>` - Send chat message\n`$msg <player> <message>` - Send whisper', inline: false },
-                        { name: '🔧 System Commands', value: '`$login` - Retry login sequence\n`$restart` - Restart bot\n`$status` - Show detailed status\n`$stats` - Show statistics\n`$config` - Show configuration', inline: false },
-                        { name: '📦 Kit Management', value: '`$queue` - Show kit queue\n`$clearqueue` - Clear kit queue\n`$cooldown [player]` - Show/clear cooldowns', inline: false },
-                        { name: '👥 User Management', value: '`$vip <add/remove/list> [user]` - Manage VIP users\n`$blacklist <add/remove/list> [user]` - Manage blacklist', inline: false },
-                        { name: '📋 Information', value: '`$inventory` - Show bot inventory\n`$help` - Show this help', inline: false },
-                        { name: '🎉 Giveaway System', value: '`$giveaway create "Title" "Prize" <minutes>` - Create giveaway\n`$giveaway end` - End current giveaway\n`$giveaway cancel` - Cancel giveaway\n`$giveaway participants` - Show participants\n`$giveaway` - Show giveaway status', inline: false }
-                    ];
-                    const helpEmbed = createEmbed('🔧 Enhanced Bot Commands',
-                        'Available commands for bot management',
-                        CONFIG.discord.embedColor.info,
-                        helpFields
-                    );
-                    await msg.reply({ embeds: [helpEmbed] });
-                    break;
-                case 'giveaway':
-                    if (args.length === 0) {
-                        if (giveawayManager.hasActiveGiveaway()) {
-                            const info = giveawayManager.getGiveawayInfo();
-                            if (info.success) {
-                                const statusEmbed = createEmbed(
-                                    '🎉 Active Giveaway',
+                        `• Random Delay: ${CONFIG.spammer.randomDelay / 1000}s`
+                    )
+                    .setColor(CONFIG.discord.embedColor.info)
+                    .setTimestamp();
+                await msg.reply({ embeds: [configEmbed] });
+                break;
+
+            case 'giveaway':
+                if (args.length === 0) {
+                    if (giveawayManager.hasActiveGiveaway()) {
+                        const info = giveawayManager.getGiveawayInfo();
+                        if (info.success) {
+                            const statusEmbed = new EmbedBuilder()
+                                .setTitle('🎉 Giveaway Status')
+                                .setDescription(
                                     `**Title:** ${info.giveaway.title}\n` +
                                     `**Prize:** ${info.giveaway.prize}\n` +
                                     `**Time Left:** ${info.timeLeft}\n` +
-                                    `**Participants:** ${info.participantCount}`,
-                                    CONFIG.discord.embedColor.info,
-                                    [
-                                        { name: '📝 How to Join', value: 'Type `$giveaway` in Minecraft chat', inline: true },
-                                        { name: '⏰ Ends at', value: `<t:${Math.floor(info.giveaway.endTime / 1000)}:F>`, inline: true }
-                                    ]
-                                );
-                                await msg.reply({ embeds: [statusEmbed] });
-                            }
+                                    `**Participants:** ${info.participantCount}`
+                                )
+                                .setColor(CONFIG.discord.embedColor.info)
+                                .addFields([
+                                    { name: '📝 How to Join', value: 'Type `$giveaway` in Minecraft chat', inline: true },
+                                    { name: '⏰ Ends at', value: `<t:${Math.floor(info.giveaway.endTime / 1000)}:F>`, inline: true }
+                                ])
+                                .setTimestamp();
+                            await msg.reply({ embeds: [statusEmbed] });
                         } else {
                             await msg.reply('❌ No active giveaway');
                         }
                     } else {
-                        const subCommand = args[0].toLowerCase();
-                        switch (subCommand) {
-                            case 'create':
-                                if (args.length < 4) {
-                                    await msg.reply('❌ Usage: `$giveaway create "Title" "Prize" <minutes>`\nExample: `$giveaway create "Diamond Giveaway" "64 Diamonds" 10`');
-                                    break;
-                                }
-                                const fullArgs = content.slice(content.indexOf('create') + 6).trim();
-                                const matches = fullArgs.match(/"([^"]+)"\s+"([^"]+)"\s+(\d+)/);
-                                if (!matches) {
-                                    await msg.reply('❌ Invalid format. Use: `$giveaway create "Title" "Prize" <minutes>`');
-                                    break;
-                                }
-                                const title = matches[1];
-                                const prize = matches[2];
-                                const duration = parseInt(matches[3]);
-                                if (duration < 1 || duration > 1440) {
-                                    await msg.reply('❌ Duration must be between 1 and 1440 minutes (24 hours)');
-                                    break;
-                                }
-                                const result = giveawayManager.createGiveaway(title, prize, duration, msg.author.username);
-                                if (result.success) {
-                                    await msg.reply(`✅ Giveaway created successfully!\n**Title:** ${title}\n**Prize:** ${prize}\n**Duration:** ${duration} minutes`);
-                                } else {
-                                    await msg.reply(`❌ ${result.message}`);
-                                }
+                        await msg.reply('❌ No active giveaway');
+                    }
+                } else {
+                    const subCommand = args[0].toLowerCase();
+                    switch (subCommand) {
+                        case 'create':
+                            if (args.length < 4) {
+                                await msg.reply('❌ Invalid format. Usage: `$giveaway create "Title" "Prize" <minutes>`\nExample: `$giveaway create "Diamond Sword" "Diamond Sword" 10`');
                                 break;
-                            case 'end':
-                                const endResult = giveawayManager.endGiveaway(false);
-                                if (endResult.success) {
-                                    const { winner, participantCount } = endResult.result;
-                                    if (winner) {
-                                        await msg.reply(`✅ Giveaway ended! Winner: **${winner}** (${participantCount} participants)`);
+                            }
+                            const fullArgs = content.slice(content.indexOf('create') + 7).trim();
+                            const matches = fullArgs.match(/"([^"]+)"\s*"([^"]+)"\s*(\d+)/);
+                            if (!matches) {
+                                await msg.reply('❌ Invalid format. Use: `$giveaway create "Title" "Prize" <minutes>`');
+                                break;
+                            }
+                            const title = matches[1];
+                            const prize = matches[2];
+                            const duration = parseInt(matches[3]);
+                            if (duration < 1 || duration > 1440) {
+                                await msg.reply('❌ Duration must be between 1 and 1440 minutes (24 hours)');
+                                break;
+                            }
+                            const result = giveawayManager.createGiveaway(title, prize, duration, msg.author.username);
+                            if (result.success) {
+                                await msg.reply(`✅ Giveaway created successfully!\n**Title:** ${title}\n**Prize:** ${prize}\n**Duration:** ${duration} minutes`);
+                            } else {
+                                await msg.reply(`❌ ${result.message}`);
+                            }
+                            break;
+                        case 'end':
+                            const endResult = giveawayManager.endGiveaway();
+                            if (endResult.success) {
+                                const { winner, participantCount } = endResult.result;
+                                if (winner) {
+                                    await msg.reply(`✅ Giveaway ended! Winner: **${winner}** (${participantCount} participants)`);
+                                } else {
+                                    await msg.reply('✅ Giveaway ended with no participants');
+                                }
+                            } else {
+                                await msg.reply(`❌ ${endResult.message}`);
+                            }
+                            break;
+                        case 'cancel':
+                            const cancelResult = giveawayManager.cancelGiveaway();
+                            if (cancelResult.success) {
+                                await msg.reply(`✅ Giveaway cancelled successfully\n**Prize:** ${cancelResult.giveaway.prize}\n**Participants:** ${cancelResult.giveaway.participants.size}`);
+                            } else {
+                                await msg.reply(`❌ ${cancelResult.message}`);
+                            }
+                            break;
+                        case 'participants':
+                            if (giveawayManager.hasActiveGiveaway()) {
+                                const info = giveawayManager.getGiveawayInfo();
+                                if (info.success) {
+                                    const participants = Array.from(info.giveaway.participants);
+                                    if (participants.length > 0) {
+                                        const participantList = participants.join(', ');
+                                        const participantEmbed = new EmbedBuilder()
+                                            .setTitle('👥 Giveaway Participants')
+                                            .setDescription(`**Total:** ${participants.length}\n**Participants:** ${participantList}`)
+                                            .setColor(CONFIG.discord.embedColor.info)
+                                            .setTimestamp();
+                                        await msg.reply({ embeds: [participantEmbed] });
                                     } else {
-                                        await msg.reply(`✅ Giveaway ended with no participants`);
-                                    }
-                                } else {
-                                    await msg.reply(`❌ ${endResult.message}`);
-                                }
-                                break;
-                            case 'cancel':
-                                const cancelResult = giveawayManager.cancelGiveaway();
-                                if (cancelResult.success) {
-                                    await msg.reply(`✅ Giveaway cancelled successfully\n**Prize:** ${cancelResult.giveaway.prize}\n**Participants:** ${cancelResult.giveaway.participants.size}`);
-                                } else {
-                                    await msg.reply(`❌ ${cancelResult.message}`);
-                                }
-                                break;
-                            case 'participants':
-                                if (giveawayManager.hasActiveGiveaway()) {
-                                    const info = giveawayManager.getGiveawayInfo();
-                                    if (info.success) {
-                                        const participants = Array.from(info.giveaway.participants);
-                                        if (participants.length > 0) {
-                                            const participantList = participants.join(', ');
-                                            const participantEmbed = createEmbed(
-                                                '👥 Giveaway Participants',
-                                                `**Total:** ${participants.length}\n**Participants:** ${participantList}`,
-                                                CONFIG.discord.embedColor.info
-                                            );
-                                            await msg.reply({ embeds: [participantEmbed] });
-                                        } else {
-                                            await msg.reply('📝 No participants yet');
-                                        }
+                                        await msg.reply('📝 No participants yet');
                                     }
                                 } else {
                                     await msg.reply('❌ No active giveaway');
                                 }
-                                break;
-                            default:
-                                await msg.reply('❌ Unknown giveaway command. Use: `create`, `end`, `cancel`, or `participants`');
-                                break;
-                        }
+                            } else {
+                                await msg.reply('❌ No active giveaway');
+                            }
+                            break;
+                        default:
+                            await msg.reply('❌ Unknown giveaway command. Use: `$giveaway create`, `$giveaway end`, `$giveaway cancel`, or `$giveaway participants`');
+                            break;
                     }
-                    break;
-                default:
-                    await msg.reply('❌ Unknown command. Use `$help` for available commands.');
-                    break;
-            }
-        } catch (error) {
-            logger.error(`Discord command error: ${error.message}`);
-            await msg.reply('❌ An error occurred while executing the command.');
+                }
+                break;
+
+            default:
+                await msg.reply('❌ Unknown command. Use `$help` for a list of commands.');
+                break;
         }
-    } else if (content && state.isConnected && state.isLoggedIn) {
-        if (await safeChat(content)) await msg.react('✅');
-        else await msg.react('❌');
+    } catch (error) {
+        logger.error(`Error handling Discord command "${command}": ${error.message}`);
+        await msg.reply('❌ An error occurred while processing your command.');
     }
 });
 
-process.on('uncaughtException', (error) => {
-    logger.error(`Uncaught exception: ${error.message}`, error.stack);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error(`Unhandled rejection: ${reason}`);
-});
-
-process.on('SIGINT', () => {
-    logger.info('Shutting down gracefully...');
-    state.reset();
-    discordClient.destroy();
-    process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-    logger.info('Received SIGTERM, shutting down gracefully...');
-    state.reset();
-    discordClient.destroy();
-    process.exit(0);
-});
-
-state.on('kitDelivered', (data) => {
-    logger.info(`Kit delivered to ${data.username} at ${data.position.x}, ${data.position.y}, ${data.position.z} (Kit: ${data.kitType})`);
-});
-
-state.on('vipAdded', (username) => {
-    logger.info(`Added VIP user: ${username}`);
-});
-
-state.on('vipRemoved', (username) => {
-    logger.info(`Removed VIP user: ${username}`);
-});
-
-state.on('reset', () => {
-    logger.info('Bot state reset');
-});
-
+// Validate environment variables
 function validateConfig() {
-    const required = [
-        'DISCORD_TOKEN',
-        'DISCORD_CHANNEL_ID',
-        'COORDS_CHANNEL_ID'
-    ];
+    const required = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_ID', 'COORDS_CHANNEL_ID', 'MC_HOST', 'MC_USERNAME'];
     for (const env of required) {
         if (!process.env[env]) {
             logger.error(`Missing required environment variable: ${env}`);
             process.exit(1);
         }
     }
-    logger.info('Configuration validated successfully');
+    logger.info('✓ Configuration validated successfully');
 }
 
+// Startup function to initialize bot and Discord client
 async function startup() {
     try {
-        logger.info('Starting Enhanced Minecraft Bot...');
         validateConfig();
-        await discordClient.login(process.env.DISCORD_TOKEN);
-        await new Promise(resolve => {
-            if (discordClient.isReady()) resolve();
-            else discordClient.once('ready', resolve);
-        });
-        logger.info('Discord client ready, initializing Minecraft bot...');
         initBot();
+        await discordClient.login(process.env.DISCORD_TOKEN);
     } catch (error) {
         logger.error(`Startup failed: ${error.message}`);
         process.exit(1);
     }
 }
 
+// Create a simple HTTP server for health checks
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot is running');
 });
-server.listen(process.env.PORT || 10000, () => {
-    logger.info(`Health check server running on port ${process.env.PORT || 10000}`);
+server.listen(8080, () => {
+    logger.info('Health check server running on port 8080');
 });
+
+// Start the bot
 startup();
+
+// Handle process termination
+process.on('SIGTERM', async () => {
+    logger.info('Received SIGTERM. Shutting down...');
+    state.reset();
+    if (mcBot) mcBot.quit();
+    await discordClient.destroy();
+    process.exit(0);
+});
+
+process.on('uncaughtException', (error) => {
+    logger.error(`Uncaught Exception: ${error.stack}`);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
+});
