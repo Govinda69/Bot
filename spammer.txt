@@ -6,22 +6,32 @@
 >Do $kit for a free kit
 >Type /kill to die
 >Also try other bots!
->Fuck Noobs
+
+>Get started with free loot! Type $kit` to grab your kit
+>Need basic gear fast? Use `$kit` now!
+>Kickstart your adventure! Claim `$kit` for free
+
+>Ready to fight? Grab your gear with `$kit pvp`
+>Dominate in combat! Type `$kit pvp` for battle gear
+>Want to win every duel? Use `$kit pvp` now!
+
+>Want to destroy someone base? Do `$kit greif`
+>Plan a raid? Get tools with `$kit greif`!
+>Blow up your enemies! Use `$kit greif` today
+
+>Lost your stuff? Recover with `$kit regear`
+>Get back in action! Type `$kit regear` now
+>Need quick gear? Claim `$kit regear` for loot
 >0xPwnd On Top!!!!!!
 >Make sure to set your home using /sethome
 >Don't judge me cuz of these prompts (Written By ChatGPT)
 >Do $kit For Illegal Kits
 >8b8t>>>6b6t
+
 >Do $tps to see how bad or good is the server
 >Do $ping to see your ping
 >Do $bestping to see who got the best ping
 >Do $worstping to see who got the shit ping
 >Do $coords to see my coordinates
 >Do $seed to see the seed of 8b8t
->Do
->Ass
->Tits
->Boobs
->Pussy
->Dick
 /8b8t
