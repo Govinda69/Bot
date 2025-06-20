@@ -852,6 +852,7 @@ function handleKitRequest(username, kitType = 'default') {
         safeChat(`/msg ${username} &6&l📦 I also have other kits! Try them too. &3&lAvailable kits: default, pvp, greif, regear &9&l(Usage: $kit [type])`);
     }
 }
+
 async function loadSpamMessages() {
     try {
         const filePath = path.resolve(CONFIG.spammer.filePath);
@@ -877,7 +878,6 @@ async function startSpammer() {
     }
 
     state.spammerStarted = true;
-    let index = 0;
     
     const sendSpamMessage = async () => {
         if (!state.isConnected || !state.isLoggedIn) {
@@ -886,10 +886,9 @@ async function startSpammer() {
             return;
         }
         
-        const message = spamLines[index];
-        if (await safeChat(message)) {
-            index = (index + 1) % spamLines.length;
-        }
+        const randomIndex = Math.floor(Math.random() * spamLines.length);
+        const message = spamLines[randomIndex];
+        await safeChat(message);
         
         const randomDelay = Math.floor(Math.random() * CONFIG.spammer.randomDelay);
         setTimeout(sendSpamMessage, CONFIG.spammer.interval + randomDelay);
