@@ -993,7 +993,9 @@ function setupBotEvents() {
     });
 
     mcBot.on('chat', async (username, message) => {
-        if (username === mcBot.username) return;
+        // Remove the return statement to allow bot messages to be forwarded
+        // if (username === mcBot.username) return;
+
         state.stats.messagesReceived++;
 
         if (message.includes('You have successfully logged in') || 
@@ -1007,17 +1009,24 @@ function setupBotEvents() {
                 logger.info('Login status updated to true');
             }
         }
-    
+
         try {
             const cleanMessage = sanitizeMessage(message);
             const timestamp = Math.floor(Date.now() / 1000);
+
+            // Check if this is the bot's own message to add a label
+            const botLabel = username === mcBot.username ? ' [BOT]' : '';
+
             await sendToDiscord(
                 process.env.DISCORD_CHANNEL_ID, 
-                `**[MC]** \`${username}\`: ${cleanMessage} <t:${timestamp}:t>`
+                `**[MC]${botLabel}** \`${username}\`: ${cleanMessage} <t:${timestamp}:t>`
             );
         } catch (error) {
             logger.error(`Error forwarding message to Discord: ${error.message}`);
         }
+
+        // Only process commands if it's not the bot's own message
+        if (username === mcBot.username) return;
 
         const args = message.trim().split(' ');
         const command = args[0].toLowerCase();
@@ -1186,8 +1195,26 @@ discordClient.on('messageCreate', async (msg) => {
     if (msg.author.bot || msg.channel.id !== process.env.DISCORD_CHANNEL_ID) return;
 
     const content = msg.content.trim();
-    if (!content.startsWith('$')) return;
+    
+    // Handle regular messages (no $ prefix)
+    if (!content.startsWith('$')) {
+        if (content.length > 0) {
+            try {
+                const success = await safeChat(content);
+                if (success) {
+                    await msg.react('✅').catch(() => {});
+                } else {
+                    await msg.react('❌').catch(() => {});
+                }
+            } catch (error) {
+                logger.error(`Error sending message to MC: ${error.message}`);
+                await msg.react('⚠️').catch(() => {});
+            }
+        }
+        return;
+    }
 
+    // Rest of your command handling ($commands) stays the same...
     const args = content.slice(1).split(' ');
     const command = args.shift().toLowerCase();
 
