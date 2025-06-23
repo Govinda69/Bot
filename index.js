@@ -1105,7 +1105,7 @@ function setupBotEvents() {
         // Inside the chat event handler (where other commands are processed)
         } else if (command === '$discord' || command === '$dc') {
     // Send the Discord invite link
-            await safeChat(`/msg ${username} &9&lJoin our Discord: &b&nhttps://discord.gg/TWpPzvPMHV`);
+            await safeChat(`/msg ${username} &9&lJoin our Discord: &b&nhttps://dsc.gg/0xpwndbot`);
         } else if (command === '$ping') {
             let target = username;
             if (args.length > 1) {
