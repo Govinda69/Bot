@@ -13,16 +13,16 @@ const CONFIG = {
         username: process.env.MC_USERNAME || '0xPwnd_Bot',
         version: process.env.MC_VERSION || '1.20.4',
         reconnectDelay: 30000,
-        maxReconnectAttempts: 10,
+        maxReconnectAttempts: 1000,
         loginDelay: 3000,
         loginTimeout: 15000,
-        loginMaxRetries: 5,
+        loginMaxRetries: 1000,
         healthThreshold: 5,
         maxChatLength: 256
     },
     kit: {
         cooldownTime: 30 * 1000,
-        vipCooldownTime: 10 * 1000,
+        vipCooldownTime: 0 * 1000,
         teleportTimeout: 25000,
         deliveryDelay: 3000,
         proximityDistance: 5,
@@ -37,7 +37,7 @@ const CONFIG = {
         }
     },
     spammer: {
-        interval: 40000,
+        interval: 30000,
         filePath: 'spammer.txt',
         maxMessageLength: 100,
         randomDelay: 5000
